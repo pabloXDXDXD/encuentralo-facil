@@ -1,0 +1,183 @@
+import { pool } from "./db";
+
+export type Availability = "available" | "out_of_stock";
+
+export type AvailabilityRow = {
+  store_id: string;
+  store_name: string;
+  barrio: string;
+  product_slug: string;
+  product_name: string;
+  emoji: string;
+  availability: Availability;
+  price_from: number | null;
+  reporter_count: number;
+  last_seen_at: string | Date;
+  freshness: string;
+};
+
+type RawAvailabilityRow = Omit<AvailabilityRow, "reporter_count"> & {
+  reporter_count: string | number;
+};
+
+function normalize(rows: RawAvailabilityRow[]): AvailabilityRow[] {
+  return rows.map((r) => ({ ...r, reporter_count: Number(r.reporter_count) }));
+}
+
+/** Current availability snapshot. barrio=null -> whole city. */
+export async function getAvailability(barrio?: string | null) {
+  const { rows } = await pool.query<RawAvailabilityRow>(
+    "select * from public.get_active_availability($1)",
+    [barrio ?? null],
+  );
+  return normalize(rows);
+}
+
+export async function getStoreAvailability(storeId: string) {
+  const { rows } = await pool.query<RawAvailabilityRow>(
+    "select * from public.get_active_availability(null) where store_id = $1",
+    [storeId],
+  );
+  return normalize(rows);
+}
+
+export type SubmitReportInput = {
+  storeId: string;
+  productId: string;
+  availability: Availability;
+  priceCup?: number | null;
+  comment?: string | null;
+  deviceHash: string;
+};
+
+export type SubmitReportResult = {
+  ok: boolean;
+  duplicate?: boolean;
+  report_id?: string;
+  error?: string;
+};
+
+export async function submitReport(input: SubmitReportInput): Promise<SubmitReportResult> {
+  const { rows } = await pool.query<{ result: SubmitReportResult }>(
+    "select public.submit_report($1,$2,$3,$4,$5,$6) as result",
+    [
+      input.storeId,
+      input.productId,
+      input.availability,
+      input.priceCup ?? null,
+      input.comment ?? null,
+      input.deviceHash,
+    ],
+  );
+  return rows[0].result;
+}
+
+export type StoreSummary = {
+  id: string;
+  name: string;
+  barrio: string;
+  kind: string;
+};
+
+export async function searchStores(q?: string | null, barrio?: string | null) {
+  const { rows } = await pool.query<StoreSummary>(
+    `select id, name, barrio, kind
+       from public.stores
+      where status = 'active'
+        and ($1::text is null or barrio = $1)
+        and ($2::text is null or name ilike '%' || $2 || '%')
+      order by barrio, name
+      limit 300`,
+    [barrio ?? null, q ?? null],
+  );
+  return rows;
+}
+
+export async function createStore(name: string, barrio: string, kind: string) {
+  const { rows } = await pool.query<{
+    result: { ok: boolean; error?: string; existing?: boolean; store_id?: string };
+  }>("select public.create_pending_store($1,$2,$3,null,null) as result", [
+    name,
+    barrio,
+    kind,
+  ]);
+  return rows[0].result;
+}
+
+export type CatalogProduct = {
+  id: string;
+  slug: string;
+  name: string;
+  emoji: string;
+};
+
+export type CatalogCategory = {
+  id: string;
+  name: string;
+  emoji: string;
+  products: CatalogProduct[];
+};
+
+export async function getCatalog(): Promise<CatalogCategory[]> {
+  const { rows } = await pool.query<{
+    cat_id: string;
+    cat_name: string;
+    cat_emoji: string;
+    sort_order: number;
+    id: string;
+    slug: string;
+    name: string;
+    emoji: string;
+  }>(
+    `select c.id as cat_id, c.name as cat_name, c.emoji as cat_emoji, c.sort_order,
+            p.id, p.slug, p.name, p.emoji
+       from public.product_categories c
+       join public.products p on p.category_id = c.id and p.active = true
+      order by c.sort_order, p.name`,
+  );
+
+  const categories: CatalogCategory[] = [];
+  for (const r of rows) {
+    let cat = categories.find((c) => c.id === r.cat_id);
+    if (!cat) {
+      cat = { id: r.cat_id, name: r.cat_name, emoji: r.cat_emoji, products: [] };
+      categories.push(cat);
+    }
+    cat.products.push({ id: r.id, slug: r.slug, name: r.name, emoji: r.emoji });
+  }
+  return categories;
+}
+
+export async function listBarrios(): Promise<string[]> {
+  const { rows } = await pool.query<{ barrio: string }>(
+    `select distinct barrio from public.stores where status = 'active' order by barrio`,
+  );
+  return rows.map((r) => r.barrio);
+}
+
+export async function getProductBySlug(slug: string) {
+  const { rows } = await pool.query<{
+    id: string;
+    slug: string;
+    name: string;
+    emoji: string;
+  }>(
+    `select id, slug, name, emoji from public.products where slug = $1 and active = true`,
+    [slug],
+  );
+  return rows[0] ?? null;
+}
+
+export async function getStoreById(id: string) {
+  const valid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  if (!valid) return null;
+  const { rows } = await pool.query<{
+    id: string;
+    name: string;
+    barrio: string;
+    kind: string;
+  }>(`select id, name, barrio, kind from public.stores where id = $1 and status = 'active'`, [
+    id,
+  ]);
+  return rows[0] ?? null;
+}
