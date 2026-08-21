@@ -14,6 +14,7 @@ export type AvailabilityRow = {
   reporter_count: number;
   last_seen_at: string | Date;
   freshness: string;
+  latest_report_id: string;
 };
 
 type RawAvailabilityRow = Omit<AvailabilityRow, "reporter_count"> & {
@@ -56,6 +57,25 @@ export type SubmitReportResult = {
   report_id?: string;
   error?: string;
 };
+
+export type SubmitVoteInput = {
+  reportId: string;
+  vote: "confirm" | "deny";
+  deviceHash: string;
+};
+
+export type SubmitVoteResult = {
+  ok: boolean;
+  error?: string;
+};
+
+export async function submitVote(input: SubmitVoteInput): Promise<SubmitVoteResult> {
+  const { rows } = await pool.query<{ result: SubmitVoteResult }>(
+    "select public.submit_vote($1,$2,$3) as result",
+    [input.reportId, input.vote, input.deviceHash],
+  );
+  return rows[0].result;
+}
 
 export async function submitReport(input: SubmitReportInput): Promise<SubmitReportResult> {
   const { rows } = await pool.query<{ result: SubmitReportResult }>(

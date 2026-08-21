@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getAvailability, listBarrios } from "@/lib/repo";
 import { formatPrice, timeAgo } from "@/lib/format";
+import VoteButtons from "@/components/VoteButtons";
 
 // Dynamic rendering keeps the freshness banner honest; the service worker
 // provides the offline layer on top of this.
@@ -15,27 +16,38 @@ type Row = Awaited<ReturnType<typeof getAvailability>>[number];
 function ReportRow({ row }: { row: Row }) {
   const available = row.availability === "available";
   return (
-    <article className="flex items-center gap-3 rounded-xl border border-stone-200 bg-white p-3">
-      <span className="text-2xl leading-none">{row.emoji}</span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-semibold">
-          {row.product_name}{" "}
-          {available && row.price_from !== null && (
-            <span className="font-bold text-emerald-700">{formatPrice(row.price_from)}</span>
-          )}
-        </p>
-        <p className="truncate text-xs text-stone-500">
-          {row.store_name} · {timeAgo(row.last_seen_at)}
-          {row.reporter_count > 1 && ` · ${row.reporter_count} reportes`}
-        </p>
+    <article className="rounded-xl border border-stone-200 bg-white p-3">
+      <div className="flex items-center gap-3">
+        <span className="text-2xl leading-none">{row.emoji}</span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-semibold">
+            {row.product_name}{" "}
+            {available && row.price_from !== null && (
+              <span className="font-bold text-emerald-700">{formatPrice(row.price_from)}</span>
+            )}
+          </p>
+          <p className="truncate text-xs text-stone-500">
+            {row.store_name} · {timeAgo(row.last_seen_at)}
+            {row.reporter_count > 1 && ` · ${row.reporter_count} reportes`}
+          </p>
+        </div>
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+            available ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700"
+          }`}
+        >
+          {available ? "Hay" : "No hay"}
+        </span>
       </div>
-      <span
-        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-          available ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700"
-        }`}
-      >
-        {available ? "Hay" : "No hay"}
-      </span>
+      {!available && (
+        <p className="mt-1 pl-11 text-xs text-stone-400">
+          Último aviso: alguien reportó que se agotó.
+        </p>
+      )}
+      <div className="mt-2 flex items-center gap-2 border-t border-stone-100 pt-2">
+        <span className="text-xs text-stone-400">¿Lo confirmas?</span>
+        <VoteButtons reportId={row.latest_report_id} />
+      </div>
     </article>
   );
 }
