@@ -16,6 +16,8 @@ export type AvailabilityRow = {
   freshness: string;
   latest_report_id: string;
   queue_level: number | null;
+  lat: number | string | null;
+  lng: number | string | null;
 };
 
 type RawAvailabilityRow = Omit<AvailabilityRow, "reporter_count"> & {

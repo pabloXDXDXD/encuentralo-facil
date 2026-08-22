@@ -2,10 +2,20 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Basket, Star } from "@phosphor-icons/react";
+import dynamic from "next/dynamic";
+import { Basket, MapPin, Star } from "@phosphor-icons/react";
 import VoteButtons from "@/components/VoteButtons";
 import { ProductIcon } from "@/lib/product-icons";
 import { formatPrice, queueLabel, timeAgo } from "@/lib/format";
+
+const AvailabilityMap = dynamic(() => import("@/components/AvailabilityMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="card-ticket h-[60dvh] animate-pulse p-4 text-center text-sm text-ink-soft">
+      Cargando mapa…
+    </div>
+  ),
+});
 
 const SAVED_KEY = "dh_saved_products";
 
@@ -22,6 +32,8 @@ export type HomeRow = {
   last_seen_at: string;
   latest_report_id: string;
   queue_level: number | null;
+  lat: number | null;
+  lng: number | null;
 };
 
 type Props = {
@@ -53,6 +65,7 @@ export default function HomeView({ rows: initialRows, barrios, activeBarrio, off
   const [saved, setSaved] = useState<string[]>([]);
   const [filterOn, setFilterOn] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [view, setView] = useState<"list" | "map">("list");
 
   useEffect(() => {
     setSaved(readSaved());
@@ -134,49 +147,88 @@ export default function HomeView({ rows: initialRows, barrios, activeBarrio, off
         ))}
       </nav>
 
-      <button
-        type="button"
-        onClick={() => setFilterOn((v) => !v)}
-        aria-pressed={filtering}
-        className={`btn w-full justify-between rounded-md px-3 py-2 text-sm ${
-          filtering ? "bg-accent text-on-accent" : "btn-ghost border-dashed"
-        }`}
-      >
-        <span>⭐ Mis búsquedas{loaded && saved.length > 0 ? ` (${saved.length})` : ""}</span>
-        <span className="text-xs font-semibold opacity-80">
-          {filtering ? "activado" : "filtrar"}
-        </span>
-      </button>
+      <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Vista">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "list"}
+          onClick={() => setView("list")}
+          className={`btn justify-center rounded-md py-2 text-sm font-bold ${
+            view === "list" ? "bg-ink text-paper" : "btn-ghost"
+          }`}
+        >
+          Lista
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "map"}
+          onClick={() => setView("map")}
+          className={`btn justify-center gap-2 rounded-md py-2 text-sm font-bold ${
+            view === "map" ? "bg-ink text-paper" : "btn-ghost"
+          }`}
+        >
+          <MapPin size={16} weight={view === "map" ? "fill" : "regular"} aria-hidden />
+          Mapa
+        </button>
+      </div>
 
-      {offline && (
-        <div className="card-flat p-4 text-sm">
-          <p className="font-display">Sin conexión</p>
-          <p className="mt-1 text-ink-soft">
-            No llega el servidor. Intenta de nuevo en unos minutos.
-          </p>
-        </div>
+      {view === "map" && <AvailabilityMap rows={visibleRows} />}
+
+      {view === "list" && (
+        <>
+          <button
+            type="button"
+            onClick={() => setFilterOn((v) => !v)}
+            aria-pressed={filtering}
+            className={`btn w-full justify-between rounded-md px-3 py-2 text-sm ${
+              filtering ? "bg-accent text-on-accent" : "btn-ghost border-dashed"
+            }`}
+          >
+            <span>⭐ Mis búsquedas{loaded && saved.length > 0 ? ` (${saved.length})` : ""}</span>
+            <span className="text-xs font-semibold opacity-80">
+              {filtering ? "activado" : "filtrar"}
+            </span>
+          </button>
+
+          {offline && (
+            <div className="card-flat p-4 text-sm">
+              <p className="font-display">Sin conexión</p>
+              <p className="mt-1 text-ink-soft">
+                No llega el servidor. Intenta de nuevo en unos minutos.
+              </p>
+            </div>
+          )}
+
+          {!offline && visibleRows.length === 0 && (
+            <div
+              className="card-ticket p-6 text-center"
+              style={{ "--i": 0 } as React.CSSProperties}
+            >
+              <Basket aria-hidden size={44} className="mx-auto text-ink-soft" weight="duotone" />
+              <p className="mt-2 font-display text-xl">
+                {filtering && saved.length === 0
+                  ? "Sin búsquedas guardadas"
+                  : "Nada reportado aquí aún"}
+              </p>
+              <p className="mx-auto mt-1 max-w-xs text-sm text-ink-soft">
+                {filtering && saved.length === 0
+                  ? "Toca la estrella de un producto para seguirlo."
+                  : "Los reportes duran 6 horas visibles. Sé quien encienda la zona."}
+              </p>
+              <Link
+                href="/reportar"
+                className="btn btn-primary mt-4 rounded-md px-4 py-2 text-sm"
+              >
+                Hacer un reporte
+              </Link>
+            </div>
+          )}
+        </>
       )}
 
-      {!offline && visibleRows.length === 0 && (
-        <div className="card-ticket p-6 text-center" style={{ "--i": 0 } as React.CSSProperties}>
-          <Basket aria-hidden size={44} className="mx-auto text-ink-soft" weight="duotone" />
-          <p className="mt-2 font-display text-xl">
-            {filtering && saved.length === 0
-              ? "Sin búsquedas guardadas"
-              : "Nada reportado aquí aún"}
-          </p>
-          <p className="mx-auto mt-1 max-w-xs text-sm text-ink-soft">
-            {filtering && saved.length === 0
-              ? "Toca la estrella de un producto para seguirlo."
-              : "Los reportes duran 6 horas visibles. Sé quien encienda la zona."}
-          </p>
-          <Link href="/reportar" className="btn btn-primary mt-4 rounded-md px-4 py-2 text-sm">
-            Hacer un reporte
-          </Link>
-        </div>
-      )}
-
-      {[...byBarrio.entries()].map(([zone, zoneRows]) => (
+      {view === "list" &&
+        [...byBarrio.entries()].map(([zone, zoneRows]) => (
         <section key={zone} className="space-y-3">
           <h2 className="flex items-center gap-3">
             <span className="font-display text-lg leading-none">{zone}</span>

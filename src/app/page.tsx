@@ -22,6 +22,8 @@ export default async function Home({ searchParams }: Props) {
     rows = r.map((row) => ({
       ...row,
       last_seen_at: new Date(row.last_seen_at).toISOString(),
+      lat: row.lat === null ? null : Number(row.lat),
+      lng: row.lng === null ? null : Number(row.lng),
     }));
   } catch {
     offline = true;

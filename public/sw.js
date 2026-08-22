@@ -3,7 +3,7 @@
 //   navigations            -> network-first, cache fallback, shell last resort
 //   /api/availability|products -> network-first, cache fallback
 //   immutable _next/static -> cache-first
-const CACHE = "dh-v1";
+const CACHE = "dh-v2";
 const SHELL = ["/", "/reportar", "/como-funciona"];
 
 self.addEventListener("install", (event) => {
@@ -54,6 +54,12 @@ self.addEventListener("fetch", (event) => {
   // Freshness-critical data endpoints.
   if (url.pathname === "/api/availability" || url.pathname === "/api/products") {
     event.respondWith(networkFirst(req));
+    return;
+  }
+
+  // OSM tiles: cache-first — the city gets stored, revisits cost 0 data.
+  if (url.hostname === "tile.openstreetmap.org") {
+    event.respondWith(cacheFirst(req));
     return;
   }
 
