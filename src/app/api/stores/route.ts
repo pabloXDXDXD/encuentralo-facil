@@ -19,9 +19,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  let body: { name?: unknown; barrio?: unknown };
+  let body: { name?: unknown; barrio?: unknown; lat?: unknown; lng?: unknown };
   try {
-    body = (await req.json()) as { name?: unknown; barrio?: unknown };
+    body = (await req.json()) as typeof body;
   } catch {
     return NextResponse.json({ ok: false, error: "invalid_body" }, { status: 400 });
   }
@@ -32,8 +32,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "invalid_input" }, { status: 400 });
   }
 
+  const parseCoord = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.round(n * 1e6) / 1e6 : null;
+  };
+
   try {
-    const result = await createStore(name, barrio, "other");
+    const result = await createStore(name, barrio, "other", parseCoord(body.lat), parseCoord(body.lng));
     return NextResponse.json({
       ok: result.ok,
       error: result.error,

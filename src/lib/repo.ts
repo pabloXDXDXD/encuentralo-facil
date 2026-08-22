@@ -121,13 +121,21 @@ export async function searchStores(q?: string | null, barrio?: string | null) {
   return rows;
 }
 
-export async function createStore(name: string, barrio: string, kind: string) {
+export async function createStore(
+  name: string,
+  barrio: string,
+  kind: string,
+  lat?: number | null,
+  lng?: number | null,
+) {
   const { rows } = await query<{
     result: { ok: boolean; error?: string; existing?: boolean; store_id?: string };
-  }>("select public.create_pending_store($1,$2,$3,null,null) as result", [
+  }>("select public.create_pending_store($1,$2,$3,$4,$5) as result", [
     name,
     barrio,
     kind,
+    lat ?? null,
+    lng ?? null,
   ]);
   return rows[0].result;
 }

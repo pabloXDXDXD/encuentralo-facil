@@ -74,8 +74,14 @@ async function seed() {
   const file = path.resolve("supabase/seed.sql");
   const sql = fs.readFileSync(file, "utf8");
   return withClient(async (c) => {
-    await c.query(sql);
-    console.log("seed: done (idempotent)");
+    try {
+      await c.query(sql);
+      console.log("seed: done (idempotent)");
+    } catch (err) {
+      console.error("seed FAILED:", err.message);
+      if (err.detail) console.error("detail:", err.detail);
+      throw err;
+    }
   });
 }
 

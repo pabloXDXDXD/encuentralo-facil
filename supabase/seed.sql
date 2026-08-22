@@ -9,7 +9,8 @@ insert into public.product_categories (id, name, emoji, sort_order) values
   ('d0000000-00c0-4e00-8000-000000000005','Limpieza','🧼',5),
   ('d0000000-00c0-4e00-8000-000000000006','Higiene personal','🧴',6),
   ('d0000000-00c0-4e00-8000-000000000007','Bebidas','🥤',7),
-  ('d0000000-00c0-4e00-8000-000000000008','Otros','📦',8)
+  ('d0000000-00c0-4e00-8000-000000000008','Otros','📦',8),
+  ('d0000000-00c0-4e00-8000-000000000009','Viandas y hortalizas','🥬',9)
 on conflict (id) do nothing;
 
 insert into public.products (id, slug, name, emoji, category_id) values
@@ -62,7 +63,20 @@ insert into public.products (id, slug, name, emoji, category_id) values
   ('d0000000-00c0-4e00-8000-000000000240','baterias','Baterías AA/AAA','🔋','d0000000-00c0-4e00-8000-000000000008'),
   ('d0000000-00c0-4e00-8000-000000000241','gas-balon','Gas (balón)','🛢️','d0000000-00c0-4e00-8000-000000000008'),
   ('d0000000-00c0-4e00-8000-000000000242','bombillos','Bombillos LED','💡','d0000000-00c0-4e00-8000-000000000008'),
-  ('d0000000-00c0-4e00-8000-000000000243','velas','Velas','🕯️','d0000000-00c0-4e00-8000-000000000008')
+  ('d0000000-00c0-4e00-8000-000000000243','velas','Velas','🕯️','d0000000-00c0-4e00-8000-000000000008'),
+  -- Ampliación
+  ('d0000000-00c0-4e00-8000-000000000106','soya','Picadillo de soya','🌱','d0000000-00c0-4e00-8000-000000000001'),
+  ('d0000000-00c0-4e00-8000-000000000146','frijol-colorado','Frijol colorado','🫘','d0000000-00c0-4e00-8000-000000000002'),
+  ('d0000000-00c0-4e00-8000-000000000147','maiz-grano','Maíz en grano','🌽','d0000000-00c0-4e00-8000-000000000002'),
+  ('d0000000-00c0-4e00-8000-000000000244','caramelos','Caramelos','🍭','d0000000-00c0-4e00-8000-000000000008'),
+  -- Viandas y hortalizas
+  ('d0000000-00c0-4e00-8000-000000000250','cebolla','Cebolla','🧅','d0000000-00c0-4e00-8000-000000000009'),
+  ('d0000000-00c0-4e00-8000-000000000251','ajo','Ajo','🧄','d0000000-00c0-4e00-8000-000000000009'),
+  ('d0000000-00c0-4e00-8000-000000000252','limon','Limón','🍋','d0000000-00c0-4e00-8000-000000000009'),
+  ('d0000000-00c0-4e00-8000-000000000253','mango','Mango','🥭','d0000000-00c0-4e00-8000-000000000009'),
+  ('d0000000-00c0-4e00-8000-000000000254','platano','Plátano','🍌','d0000000-00c0-4e00-8000-000000000009'),
+  ('d0000000-00c0-4e00-8000-000000000255','boniato','Boniato','🍠','d0000000-00c0-4e00-8000-000000000009'),
+  ('d0000000-00c0-4e00-8000-000000000256','yuca','Yuca','🥔','d0000000-00c0-4e00-8000-000000000009')
 on conflict (slug) do nothing;
 
 insert into public.stores (id, name, barrio, kind, lat, lng) values
@@ -138,25 +152,62 @@ insert into public.stores (id, name, barrio, kind, lat, lng) values
   ('d0000000-00c0-4e00-8000-000000000354','Mercado Alamar','Habana del Este','private_market',23.154,-82.318)
 on conflict (id) do nothing;
 
+-- Municipios sin cobertura en La Habana
+insert into public.stores (id, name, barrio, kind, lat, lng) values
+  ('d0000000-00c0-4e00-8000-000000000355','Agropecuario Regla','Regla','state_market',23.127,-82.335),
+  ('d0000000-00c0-4e00-8000-000000000356','Bodega Guanabacoa','Guanabacoa','state_market',23.123,-82.297),
+  ('d0000000-00c0-4e00-8000-000000000357','Mercado Cotorro','Cotorro','private_market',23.095,-82.290)
+on conflict (id) do nothing;
+
+-- Segunda provincia para probar el selector en cascada
+insert into public.stores (id, name, barrio, kind, lat, lng, province) values
+  ('d0000000-00c0-4e00-8000-000000000401','Agropecuario Circunvalación','Sancti Spíritus','state_market',21.933,-79.444,'Sancti Spíritus'),
+  ('d0000000-00c0-4e00-8000-000000000402','Bodega Céspedes','Sancti Spíritus','state_market',21.931,-79.441,'Sancti Spíritus'),
+  ('d0000000-00c0-4e00-8000-000000000403','Mercado Municipal Trinidad','Trinidad','private_market',21.802,-79.983,'Sancti Spíritus'),
+  ('d0000000-00c0-4e00-8000-000000000404','MIPYME El Puente','Cabaiguán','mipyme',21.992,-79.398,'Sancti Spíritus'),
+  ('d0000000-00c0-4e00-8000-000000000405','Caribe Jatibonico','Jatibonico','state_market',21.946,-79.172,'Sancti Spíritus'),
+  ('d0000000-00c0-4e00-8000-000000000406','Mercado Yaguajay','Yaguajay','private_market',22.327,-79.192,'Sancti Spíritus')
+on conflict (id) do nothing;
+
 -- Demo reports so the first open shows a living map.
 -- Remove anytime: delete from reports where device_hash = 'seed-demo';
 with data(store_name, product_slug, avail, price, mins_ago) as (values
-  ('Agropecuario 19 y B','pollo','available',400,12),
-  ('Agropecuario 19 y B','huevos','available',180,25),
-  ('Caribe San Lázaro','aceite','available',1850,40),
-  ('Mercado Cuatro Caminos','arroz','available',320,55),
-  ('MIPYME El Vedadito','cafe','available',950,70),
+  -- La Habana: reportes frescos repartidos por municipios
+  ('Agropecuario 19 y B','pollo','available',400,15),
+  ('Agropecuario 19 y B','huevos','available',180,32),
+  ('Caribe San Lázaro','aceite','available',1850,48),
+  ('Mercado Cuatro Caminos','arroz','available',320,60),
+  ('MIPYME El Vedadito','cafe','available',950,75),
   ('Agropecuario Dolores','frijoles-negros','available',480,90),
-  ('Mercado Víbora','leche-polvo','out_of_stock',null::integer,110),
-  ('TRD Panamericana','detergente','available',780,130),
-  ('Bodega Acosta','azucar','available',210,150),
-  ('Agropecuario Santiago de las Vegas','malta','available',520,170),
-  ('MIPYME Miramar Gourmet','queso','available',1400,190),
-  ('Mercado Jesús del Monte','pasta','available',260,205),
-  ('Agropecuario Guanabo','pescado','available',600,230),
-  ('Caribe San Lázaro','jabon-lavar','out_of_stock',null::integer,250),
-  ('Bodega Kohly','pan','available',95,280),
-  ('Mercado Cubanacán','cerdo','available',350,300)
+  ('Mercado Víbora','leche-polvo','out_of_stock',null::integer,105),
+  ('TRD Panamericana','detergente','available',780,125),
+  ('Bodega Acosta','azucar','available',210,140),
+  ('MIPYME Miramar Gourmet','queso','available',1400,20),
+  ('Mercado Cubanacán','cerdo','available',350,26),
+  ('Bodega Kohly','pan','available',95,44),
+  ('Agropecuario Siboney','pescado','available',600,58),
+  ('Mercado Jesús del Monte','pasta','available',260,66),
+  ('Agropecuario Calzada del Monte','soya','available',180,36),
+  ('Bodega San Nicolás','jabon-lavar','out_of_stock',null::integer,150),
+  ('MIPYME El Ángel','papel-sanitario','available',250,80),
+  ('Agropecuario Marianao','platano','available',60,22),
+  ('Mercado Puentes Grandes','cebolla','available',150,38),
+  ('MIPYME El Bosque','mango','available',100,52),
+  ('Mercado La Lisa','boniato','available',120,64),
+  ('Agropecuario Arroyo Arenas','yuca','available',90,78),
+  ('Agropecuario Santiago de las Vegas','malta','available',520,92),
+  ('Mercado Wajay','frijol-colorado','available',520,110),
+  ('TRD Panamericana','cerveza','available',390,130),
+  ('Agropecuario Regla','maiz-grano','available',180,28),
+  ('Bodega Guanabacoa','limon','available',80,45),
+  ('Mercado Cotorro','galletas','available',300,70),
+  -- Sancti Spíritus: segunda provincia
+  ('Agropecuario Circunvalación','arroz','available',340,24),
+  ('Bodega Céspedes','aceite','available',1750,55),
+  ('Mercado Municipal Trinidad','ron','available',900,40),
+  ('MIPYME El Puente','detergente','available',820,68),
+  ('Caribe Jatibonico','huevos','available',170,85),
+  ('Mercado Yaguajay','picadillo','available',280,100)
 )
 insert into public.reports (store_id, product_id, device_hash, availability, price_cup, created_at)
 select s.id, p.id, 'seed-demo', d.avail, d.price, now() - make_interval(mins => d.mins_ago)

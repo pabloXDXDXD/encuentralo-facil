@@ -3,41 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import type { Map as LeafletMap } from "leaflet";
+import { MUNICIPIO_CENTERS, regionFor } from "@/lib/geo";
 import type { HomeRow } from "@/components/HomeView";
 
 /**
  * OpenStreetMap view of availability points.
  * - Leaflet dynamically imported (never in the initial bundle).
- * - Camera hard-limited to the Havana region + minZoom so users can't wander
- *   into tiles they don't need (data costs).
- * - Municipality focus loads ONLY that municipality: known points get a tight
- *   fitBounds; empty ones use fixed centroids so the tile request stays local.
+ * - Camera limited to the SELECTED PROVINCE region (Havana -> Havana,
+ *   Sancti Spíritus -> Sancti Spíritus): users can only load local tiles.
+ * - Municipality focus frames ONLY that municipality (fixed centroids when
+ *   there are no points yet).
  * - The Service Worker caches OSM tiles cache-first: revisits cost 0 data.
  */
-
-const HAVANA_BOUNDS: [[number, number], [number, number]] = [
-  [23.0, -82.48],
-  [23.24, -82.28],
-];
-
-/** Approximate centroids so an empty municipality still frames locally. */
-const MUNICIPIO_CENTERS: Record<string, { lat: number; lng: number }> = {
-  "Habana Vieja": { lat: 23.14, lng: -82.36 },
-  "Centro Habana": { lat: 23.145, lng: -82.378 },
-  "Diez de Octubre": { lat: 23.098, lng: -82.383 },
-  Cerro: { lat: 23.118, lng: -82.372 },
-  "Plaza de la Revolución": { lat: 23.135, lng: -82.393 },
-  Marianao: { lat: 23.128, lng: -82.437 },
-  "La Lisa": { lat: 23.131, lng: -82.458 },
-  Boyeros: { lat: 23.065, lng: -82.415 },
-  Playa: { lat: 23.115, lng: -82.42 },
-  "Arroyo Naranjo": { lat: 23.073, lng: -82.356 },
-  "San Miguel del Padrón": { lat: 23.113, lng: -82.34 },
-  Cotorro: { lat: 23.095, lng: -82.288 },
-  Guanabacoa: { lat: 23.123, lng: -82.295 },
-  Regla: { lat: 23.127, lng: -82.333 },
-  "Habana del Este": { lat: 23.156, lng: -82.322 },
-};
 
 type Props = {
   rows: HomeRow[];
@@ -56,14 +33,15 @@ export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }
     async function boot() {
       try {
         const L = (await import("leaflet")).default;
+        const region = regionFor(focusProvincia);
         if (cancelled || !containerRef.current) return;
 
         const map = L.map(containerRef.current, {
-          center: [23.12, -82.38],
-          zoom: 12,
-          minZoom: 11,
+          center: region.center,
+          zoom: focusMunicipio && MUNICIPIO_CENTERS[focusMunicipio] ? 14 : region.minZoom + 1,
+          minZoom: region.minZoom,
           maxZoom: 17,
-          maxBounds: L.latLngBounds(HAVANA_BOUNDS).pad(0.08),
+          maxBounds: L.latLngBounds(region.bounds).pad(0.08),
           maxBoundsViscosity: 0.9,
         });
 
@@ -85,7 +63,7 @@ export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [focusProvincia, focusMunicipio]);
 
   // Paint markers and frame the camera on every selection/data change.
   useEffect(() => {
@@ -97,7 +75,12 @@ export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }
 
     async function paint() {
       const L = (await import("leaflet")).default;
+      const region = regionFor(focusProvincia);
       if (cancelled || !map) return;
+
+      // Keep the camera inside the province as selections change.
+      map.setMinZoom(region.minZoom);
+      map.setMaxBounds(L.latLngBounds(region.bounds).pad(0.08));
 
       map.eachLayer((layer) => {
         if ("_url" in layer) return; // keep the tile layer
@@ -127,20 +110,16 @@ export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }
       }
 
       if (focusMunicipio && MUNICIPIO_CENTERS[focusMunicipio]) {
-        if (points.length > 0 && bounds.isValid()) {
+        if (points.length > 0) {
           map.fitBounds(bounds.pad(0.25), { maxZoom: 15 });
         } else {
           const c = MUNICIPIO_CENTERS[focusMunicipio];
           map.setView([c.lat, c.lng], 14);
         }
-      } else if (focusProvincia && focusProvincia !== "La Habana") {
-        // Non-Havana provinces have no bounded region yet; frame whatever exists.
-        if (points.length > 0 && bounds.isValid()) {
-          map.fitBounds(bounds.pad(0.35), { maxZoom: 15 });
-        }
+      } else if (points.length > 1) {
+        map.fitBounds(bounds.pad(0.25), { maxZoom: 14 });
       } else {
-        // Province-wide view: the whole city extent.
-        map.fitBounds(L.latLngBounds(HAVANA_BOUNDS));
+        map.setView(region.center, region.minZoom + 2);
       }
     }
 
@@ -164,10 +143,9 @@ export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }
           "El mapa no pudo cargar. Revisa tu conexión — la lista sigue funcionando."}
         {status === "ready" && (
           <>
-            {focusMunicipio
-              ? `Mostrando solo ${focusMunicipio} · `
-              : "Vista provincial · "}
-            Puntos verdes = hay stock · © OpenStreetMap contributors · tiles en caché
+            {focusProvincia ? `${focusProvincia}` : "Cuba"}
+            {focusMunicipio ? ` · ${focusMunicipio}` : ""} · Puntos verdes = hay stock · ©
+            OpenStreetMap contributors · tiles en caché
           </>
         )}
       </div>

@@ -39,6 +39,7 @@ export default async function Home({ searchParams }: Props) {
 
   return (
     <HomeView
+      key={`${provincia ?? ""}|${municipio ?? ""}`}
       rows={rows}
       provinces={provinces}
       municipios={municipios}

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { Basket, CaretDown, MapPin, Star } from "@phosphor-icons/react";
+import { Basket, CaretDown, MapPin } from "@phosphor-icons/react";
 import VoteButtons from "@/components/VoteButtons";
 import { ProductIcon } from "@/lib/product-icons";
 import { formatPrice, queueLabel, timeAgo } from "@/lib/format";
@@ -17,8 +17,6 @@ const AvailabilityMap = dynamic(() => import("@/components/AvailabilityMap"), {
     </div>
   ),
 });
-
-const SAVED_KEY = "dh_saved_products";
 
 export type HomeRow = {
   store_id: string;
@@ -46,23 +44,6 @@ type Props = {
   offline: boolean;
 };
 
-function readSaved(): string[] {
-  try {
-    const raw = localStorage.getItem(SAVED_KEY);
-    return raw ? (JSON.parse(raw) as string[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeSaved(list: string[]) {
-  try {
-    localStorage.setItem(SAVED_KEY, JSON.stringify(list.slice(-200)));
-  } catch {
-    /* ignore */
-  }
-}
-
 function locationHref(provincia: string | null, municipio: string | null): string {
   const params = new URLSearchParams();
   if (provincia) params.set("provincia", provincia);
@@ -72,7 +53,7 @@ function locationHref(provincia: string | null, municipio: string | null): strin
 }
 
 export default function HomeView({
-  rows: initialRows,
+  rows,
   provinces,
   municipios,
   activeProvincia,
@@ -80,16 +61,7 @@ export default function HomeView({
   offline,
 }: Props) {
   const router = useRouter();
-  const [rows, setRows] = useState<HomeRow[]>(initialRows);
-  const [saved, setSaved] = useState<string[]>([]);
-  const [filterOn, setFilterOn] = useState(false);
-  const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState<"list" | "map">("list");
-
-  useEffect(() => {
-    setSaved(readSaved());
-    setLoaded(true);
-  }, []);
 
   // Freshness loop: poll the snapshot every 60s while the tab is visible.
   useEffect(() => {
@@ -104,7 +76,7 @@ export default function HomeView({
         if (!res.ok) return;
         const data = await res.json();
         if (!alive || !data.ok) return;
-        setRows(
+        setRowsState(
           (data.rows as HomeRow[]).map((r) => ({
             ...r,
             last_seen_at: new Date(r.last_seen_at).toISOString(),
@@ -121,22 +93,14 @@ export default function HomeView({
     };
   }, [activeProvincia, activeMunicipio]);
 
-  function toggleSave(slug: string) {
-    const next = saved.includes(slug) ? saved.filter((s) => s !== slug) : [...saved, slug];
-    setSaved(next);
-    writeSaved(next);
-  }
+  // Live rows start from server data; polling refreshes on top.
+  const [rowsState, setRowsState] = useState<HomeRow[]>(rows);
 
   function changeLocation(nextProvincia: string | null, nextMunicipio: string | null) {
     router.push(locationHref(nextProvincia, nextMunicipio));
   }
 
-  const filtering = filterOn && saved.length > 0;
-
-  const visibleRows = useMemo(() => {
-    if (!filtering) return rows;
-    return rows.filter((r) => saved.includes(r.product_slug));
-  }, [rows, filtering, saved]);
+  const visibleRows = rowsState;
 
   const byZone = useMemo(() => {
     const map = new Map<string, HomeRow[]>();
@@ -235,20 +199,6 @@ export default function HomeView({
 
       {view === "list" && (
         <>
-          <button
-            type="button"
-            onClick={() => setFilterOn((v) => !v)}
-            aria-pressed={filtering}
-            className={`btn w-full justify-between rounded-md px-3 py-2 text-sm ${
-              filtering ? "bg-accent text-on-accent" : "btn-ghost border-dashed"
-            }`}
-          >
-            <span>⭐ Mis búsquedas{loaded && saved.length > 0 ? ` (${saved.length})` : ""}</span>
-            <span className="text-xs font-semibold opacity-80">
-              {filtering ? "activado" : "filtrar"}
-            </span>
-          </button>
-
           {offline && (
             <div className="card-flat p-4 text-sm">
               <p className="font-display">Sin conexión</p>
@@ -261,15 +211,9 @@ export default function HomeView({
           {!offline && visibleRows.length === 0 && (
             <div className="card-ticket p-6 text-center" style={{ "--i": 0 } as React.CSSProperties}>
               <Basket aria-hidden size={44} className="mx-auto text-ink-soft" weight="duotone" />
-              <p className="mt-2 font-display text-xl">
-                {filtering && saved.length === 0
-                  ? "Sin búsquedas guardadas"
-                  : "Nada reportado aquí aún"}
-              </p>
+              <p className="mt-2 font-display text-xl">Nada reportado aquí aún</p>
               <p className="mx-auto mt-1 max-w-xs text-sm text-ink-soft">
-                {filtering && saved.length === 0
-                  ? "Toca la estrella de un producto para seguirlo."
-                  : "Los reportes duran 6 horas visibles. Sé quien encienda la zona."}
+                Los reportes duran 6 horas visibles. Sé quien encienda la zona.
               </p>
               <Link href="/reportar" className="btn btn-primary mt-4 rounded-md px-4 py-2 text-sm">
                 Hacer un reporte
@@ -292,8 +236,6 @@ export default function HomeView({
                 key={row.store_id + row.product_slug}
                 row={row}
                 index={i}
-                saved={saved}
-                onToggleSave={toggleSave}
               />
             ))}
           </section>
@@ -305,36 +247,14 @@ export default function HomeView({
 type RowProps = {
   row: HomeRow;
   index: number;
-  saved: string[];
-  onToggleSave: (slug: string) => void;
 };
 
-function TicketRow({ row, index, saved, onToggleSave }: RowProps) {
+function TicketRow({ row, index }: RowProps) {
   const available = row.availability === "available";
-  const isSaved = saved.includes(row.product_slug);
 
   return (
     <article className="card-ticket rise p-3" style={{ "--i": index } as React.CSSProperties}>
       <div className="flex items-start gap-3">
-        <button
-          type="button"
-          aria-label={
-            isSaved
-              ? `Quitar ${row.product_name} de búsquedas`
-              : `Guardar ${row.product_name} en búsquedas`
-          }
-          aria-pressed={isSaved}
-          onClick={() => onToggleSave(row.product_slug)}
-          className="transition-transform hover:scale-110"
-        >
-          <Star
-            size={22}
-            weight={isSaved ? "fill" : "regular"}
-            className={isSaved ? "text-accent" : "text-ink-soft"}
-            aria-hidden
-          />
-        </button>
-
         <ProductIcon slug={row.product_slug} size={30} className="mt-0.5 shrink-0 text-ink" />
 
         <div className="min-w-0 flex-1">

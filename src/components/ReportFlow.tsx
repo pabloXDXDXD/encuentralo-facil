@@ -6,6 +6,7 @@ import { Check, CheckCircle, Tray, X } from "@phosphor-icons/react";
 import { outboxAdd } from "@/lib/outbox";
 import { getDeviceId } from "@/lib/client-device";
 import { ProductIcon } from "@/lib/product-icons";
+import LocationPicker from "@/components/LocationPicker";
 import { queueLabel } from "@/lib/format";
 import type { Availability } from "@/lib/repo-types";
 
@@ -14,9 +15,12 @@ type CatalogCategory = { id: string; name: string; emoji: string; products: Cata
 type StoreRow = { id: string; name: string; barrio: string };
 type Selection = { storeId: string; storeName: string };
 
-type Props = { barrios: string[] };
+type Props = {
+  barrios: string[];
+  provincia?: string | null;
+};
 
-export default function ReportFlow({ barrios }: Props) {
+export default function ReportFlow({ barrios, provincia }: Props) {
   const [step, setStep] = useState<"product" | "store" | "confirm">("product");
   const [catalog, setCatalog] = useState<CatalogCategory[]>([]);
   const [stores, setStores] = useState<StoreRow[]>([]);
@@ -34,6 +38,8 @@ export default function ReportFlow({ barrios }: Props) {
   );
   const [creatingStore, setCreatingStore] = useState(false);
   const [newStoreName, setNewStoreName] = useState("");
+  const [newStoreLat, setNewStoreLat] = useState<number | null>(null);
+  const [newStoreLng, setNewStoreLng] = useState<number | null>(null);
   const [status, setStatus] = useState<
     { kind: "idle" } | { kind: "sending" } | { kind: "queued"; offline: boolean }
   >({ kind: "idle" });
@@ -89,7 +95,7 @@ export default function ReportFlow({ barrios }: Props) {
       const res = await fetch("/api/stores", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name, barrio: storeBarrio }),
+        body: JSON.stringify({ name, barrio: storeBarrio, lat: newStoreLat, lng: newStoreLng }),
       });
       const data = await res.json();
       if (!data.ok || !data.storeId) {
@@ -100,6 +106,8 @@ export default function ReportFlow({ barrios }: Props) {
       setStores((prev) => [...prev, created]);
       setStore({ storeId: created.id, storeName: created.name });
       setCreatingStore(false);
+      setNewStoreLat(null);
+      setNewStoreLng(null);
       setStep("confirm");
     } catch {
       setError("Sin conexión para crear la tienda.");
@@ -336,6 +344,14 @@ export default function ReportFlow({ barrios }: Props) {
                 onChange={(e) => setNewStoreName(e.target.value)}
                 placeholder={`Nombre de la tienda (${storeBarrio})`}
                 className="w-full rounded-md border-2 border-ink bg-card px-3 py-2"
+              />
+              <LocationPicker
+                municipio={storeBarrio}
+                provincia={provincia}
+                onChange={(lat, lng) => {
+                  setNewStoreLat(lat);
+                  setNewStoreLng(lng);
+                }}
               />
               <div className="flex gap-2">
                 <button
