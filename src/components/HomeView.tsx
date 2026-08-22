@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { Basket, MapPin, Star } from "@phosphor-icons/react";
+import { useRouter } from "next/navigation";
+import { Basket, CaretDown, MapPin, Star } from "@phosphor-icons/react";
 import VoteButtons from "@/components/VoteButtons";
 import { ProductIcon } from "@/lib/product-icons";
 import { formatPrice, queueLabel, timeAgo } from "@/lib/format";
@@ -38,8 +39,10 @@ export type HomeRow = {
 
 type Props = {
   rows: HomeRow[];
-  barrios: string[];
-  activeBarrio: string | null;
+  provinces: string[];
+  municipios: string[];
+  activeProvincia: string | null;
+  activeMunicipio: string | null;
   offline: boolean;
 };
 
@@ -60,7 +63,23 @@ function writeSaved(list: string[]) {
   }
 }
 
-export default function HomeView({ rows: initialRows, barrios, activeBarrio, offline }: Props) {
+function locationHref(provincia: string | null, municipio: string | null): string {
+  const params = new URLSearchParams();
+  if (provincia) params.set("provincia", provincia);
+  if (municipio) params.set("municipio", municipio);
+  const qs = params.toString();
+  return qs ? `/?${qs}` : "/";
+}
+
+export default function HomeView({
+  rows: initialRows,
+  provinces,
+  municipios,
+  activeProvincia,
+  activeMunicipio,
+  offline,
+}: Props) {
+  const router = useRouter();
   const [rows, setRows] = useState<HomeRow[]>(initialRows);
   const [saved, setSaved] = useState<string[]>([]);
   const [filterOn, setFilterOn] = useState(false);
@@ -78,8 +97,10 @@ export default function HomeView({ rows: initialRows, barrios, activeBarrio, off
     async function poll() {
       if (document.hidden) return;
       try {
-        const qs = activeBarrio ? `?barrio=${encodeURIComponent(activeBarrio)}` : "";
-        const res = await fetch(`/api/availability${qs}`);
+        const qs = new URLSearchParams();
+        if (activeProvincia) qs.set("provincia", activeProvincia);
+        if (activeMunicipio) qs.set("municipio", activeMunicipio);
+        const res = await fetch(`/api/availability?${qs}`);
         if (!res.ok) return;
         const data = await res.json();
         if (!alive || !data.ok) return;
@@ -98,12 +119,16 @@ export default function HomeView({ rows: initialRows, barrios, activeBarrio, off
       alive = false;
       clearInterval(timer);
     };
-  }, [activeBarrio]);
+  }, [activeProvincia, activeMunicipio]);
 
   function toggleSave(slug: string) {
     const next = saved.includes(slug) ? saved.filter((s) => s !== slug) : [...saved, slug];
     setSaved(next);
     writeSaved(next);
+  }
+
+  function changeLocation(nextProvincia: string | null, nextMunicipio: string | null) {
+    router.push(locationHref(nextProvincia, nextMunicipio));
   }
 
   const filtering = filterOn && saved.length > 0;
@@ -113,7 +138,7 @@ export default function HomeView({ rows: initialRows, barrios, activeBarrio, off
     return rows.filter((r) => saved.includes(r.product_slug));
   }, [rows, filtering, saved]);
 
-  const byBarrio = useMemo(() => {
+  const byZone = useMemo(() => {
     const map = new Map<string, HomeRow[]>();
     for (const row of visibleRows) {
       const list = map.get(row.barrio) ?? [];
@@ -123,29 +148,60 @@ export default function HomeView({ rows: initialRows, barrios, activeBarrio, off
     return map;
   }, [visibleRows]);
 
+  const selectClass =
+    "w-full appearance-none rounded-md border-2 border-ink bg-card px-3 py-2 pr-8 text-sm font-semibold";
+
   return (
     <div className="space-y-4">
-      <nav className="flex gap-2 overflow-x-auto pb-1" aria-label="Barrios">
-        <Link
-          href="/"
-          className={`btn shrink-0 rounded-full px-3 py-1 text-sm font-bold ${
-            activeBarrio === null ? "bg-ink text-paper" : "btn-ghost"
-          }`}
-        >
-          Toda La Habana
-        </Link>
-        {barrios.map((b) => (
-          <Link
-            key={b}
-            href={`/?barrio=${encodeURIComponent(b)}`}
-            className={`btn shrink-0 rounded-full px-3 py-1 text-sm font-bold ${
-              activeBarrio === b ? "bg-ink text-paper" : "btn-ghost"
-            }`}
+      {/* Cascading location selector */}
+      <div className="grid grid-cols-2 gap-2">
+        <label className="relative block">
+          <span className="sr-only">Provincia</span>
+          <select
+            value={activeProvincia ?? ""}
+            onChange={(e) =>
+              // switching province resets the municipality
+              changeLocation(e.target.value || null, null)
+            }
+            className={selectClass}
           >
-            {b}
-          </Link>
-        ))}
-      </nav>
+            <option value="">Toda Cuba</option>
+            {provinces.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+          <CaretDown
+            aria-hidden
+            size={14}
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft"
+          />
+        </label>
+        <label className="relative block">
+          <span className="sr-only">Municipio</span>
+          <select
+            value={activeMunicipio ?? ""}
+            onChange={(e) => changeLocation(activeProvincia, e.target.value || null)}
+            className={selectClass}
+            disabled={municipios.length === 0 && !activeProvincia}
+          >
+            <option value="">
+              {activeProvincia ? "Todo el territorio" : "Elija provincia primero"}
+            </option>
+            {municipios.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+          <CaretDown
+            aria-hidden
+            size={14}
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft"
+          />
+        </label>
+      </div>
 
       <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Vista">
         <button
@@ -173,7 +229,9 @@ export default function HomeView({ rows: initialRows, barrios, activeBarrio, off
         </button>
       </div>
 
-      {view === "map" && <AvailabilityMap rows={visibleRows} />}
+      {view === "map" && (
+        <AvailabilityMap rows={visibleRows} focusMunicipio={activeMunicipio} focusProvincia={activeProvincia} />
+      )}
 
       {view === "list" && (
         <>
@@ -201,10 +259,7 @@ export default function HomeView({ rows: initialRows, barrios, activeBarrio, off
           )}
 
           {!offline && visibleRows.length === 0 && (
-            <div
-              className="card-ticket p-6 text-center"
-              style={{ "--i": 0 } as React.CSSProperties}
-            >
+            <div className="card-ticket p-6 text-center" style={{ "--i": 0 } as React.CSSProperties}>
               <Basket aria-hidden size={44} className="mx-auto text-ink-soft" weight="duotone" />
               <p className="mt-2 font-display text-xl">
                 {filtering && saved.length === 0
@@ -216,10 +271,7 @@ export default function HomeView({ rows: initialRows, barrios, activeBarrio, off
                   ? "Toca la estrella de un producto para seguirlo."
                   : "Los reportes duran 6 horas visibles. Sé quien encienda la zona."}
               </p>
-              <Link
-                href="/reportar"
-                className="btn btn-primary mt-4 rounded-md px-4 py-2 text-sm"
-              >
+              <Link href="/reportar" className="btn btn-primary mt-4 rounded-md px-4 py-2 text-sm">
                 Hacer un reporte
               </Link>
             </div>
@@ -228,18 +280,24 @@ export default function HomeView({ rows: initialRows, barrios, activeBarrio, off
       )}
 
       {view === "list" &&
-        [...byBarrio.entries()].map(([zone, zoneRows]) => (
-        <section key={zone} className="space-y-3">
-          <h2 className="flex items-center gap-3">
-            <span className="font-display text-lg leading-none">{zone}</span>
-            <span aria-hidden className="h-0.5 flex-1 bg-line" />
-            <span className="text-xs font-bold text-ink-soft">{zoneRows.length}</span>
-          </h2>
-          {zoneRows.map((row, i) => (
-            <TicketRow key={row.store_id + row.product_slug} row={row} index={i} saved={saved} onToggleSave={toggleSave} />
-          ))}
-        </section>
-      ))}
+        [...byZone.entries()].map(([zone, zoneRows]) => (
+          <section key={zone} className="space-y-3">
+            <h2 className="flex items-center gap-3">
+              <span className="font-display text-lg leading-none">{zone}</span>
+              <span aria-hidden className="h-0.5 flex-1 bg-line" />
+              <span className="text-xs font-bold text-ink-soft">{zoneRows.length}</span>
+            </h2>
+            {zoneRows.map((row, i) => (
+              <TicketRow
+                key={row.store_id + row.product_slug}
+                row={row}
+                index={i}
+                saved={saved}
+                onToggleSave={toggleSave}
+              />
+            ))}
+          </section>
+        ))}
     </div>
   );
 }
@@ -260,7 +318,11 @@ function TicketRow({ row, index, saved, onToggleSave }: RowProps) {
       <div className="flex items-start gap-3">
         <button
           type="button"
-          aria-label={isSaved ? `Quitar ${row.product_name} de búsquedas` : `Guardar ${row.product_name} en búsquedas`}
+          aria-label={
+            isSaved
+              ? `Quitar ${row.product_name} de búsquedas`
+              : `Guardar ${row.product_name} en búsquedas`
+          }
           aria-pressed={isSaved}
           onClick={() => onToggleSave(row.product_slug)}
           className="transition-transform hover:scale-110"
@@ -300,16 +362,13 @@ function TicketRow({ row, index, saved, onToggleSave }: RowProps) {
             )
           ) : null}
           <span
-            className={`stamp text-sm ${
-              available ? "stamp-hay -rotate-2" : "stamp-nohay rotate-2"
-            }`}
+            className={`stamp text-sm ${available ? "stamp-hay -rotate-2" : "stamp-nohay rotate-2"}`}
           >
             {available ? "Hay" : "No hay"}
           </span>
         </div>
       </div>
 
-      {/* Receipt perforation */}
       <div aria-hidden className="my-2 border-t-2 border-dashed border-line" />
 
       <div className="flex items-center gap-2">

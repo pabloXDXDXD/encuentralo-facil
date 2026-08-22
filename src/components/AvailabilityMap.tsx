@@ -7,24 +7,49 @@ import type { HomeRow } from "@/components/HomeView";
 
 /**
  * OpenStreetMap view of availability points.
- * - Leaflet is dynamically imported (never in the initial bundle).
- * - Camera hard-limited to the Havana region + minZoom so users can't
- *   wander into tiles they don't need (data costs).
+ * - Leaflet dynamically imported (never in the initial bundle).
+ * - Camera hard-limited to the Havana region + minZoom so users can't wander
+ *   into tiles they don't need (data costs).
+ * - Municipality focus loads ONLY that municipality: known points get a tight
+ *   fitBounds; empty ones use fixed centroids so the tile request stays local.
  * - The Service Worker caches OSM tiles cache-first: revisits cost 0 data.
  */
 
-// Whole-city bounds (incl. adjacent municipalities: Habana del Este, Boyeros...)
 const HAVANA_BOUNDS: [[number, number], [number, number]] = [
   [23.0, -82.48],
   [23.24, -82.28],
 ];
 
-export default function AvailabilityMap({ rows }: { rows: HomeRow[] }) {
+/** Approximate centroids so an empty municipality still frames locally. */
+const MUNICIPIO_CENTERS: Record<string, { lat: number; lng: number }> = {
+  "Habana Vieja": { lat: 23.14, lng: -82.36 },
+  "Centro Habana": { lat: 23.145, lng: -82.378 },
+  "Diez de Octubre": { lat: 23.098, lng: -82.383 },
+  Cerro: { lat: 23.118, lng: -82.372 },
+  "Plaza de la Revolución": { lat: 23.135, lng: -82.393 },
+  Marianao: { lat: 23.128, lng: -82.437 },
+  "La Lisa": { lat: 23.131, lng: -82.458 },
+  Boyeros: { lat: 23.065, lng: -82.415 },
+  Playa: { lat: 23.115, lng: -82.42 },
+  "Arroyo Naranjo": { lat: 23.073, lng: -82.356 },
+  "San Miguel del Padrón": { lat: 23.113, lng: -82.34 },
+  Cotorro: { lat: 23.095, lng: -82.288 },
+  Guanabacoa: { lat: 23.123, lng: -82.295 },
+  Regla: { lat: 23.127, lng: -82.333 },
+  "Habana del Este": { lat: 23.156, lng: -82.322 },
+};
+
+type Props = {
+  rows: HomeRow[];
+  focusMunicipio?: string | null;
+  focusProvincia?: string | null;
+};
+
+export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
-  // Boot Leaflet once.
   useEffect(() => {
     let cancelled = false;
 
@@ -62,7 +87,7 @@ export default function AvailabilityMap({ rows }: { rows: HomeRow[] }) {
     };
   }, []);
 
-  // Paint markers whenever rows change.
+  // Paint markers and frame the camera on every selection/data change.
   useEffect(() => {
     if (status !== "ready") return;
     const map = mapRef.current;
@@ -75,11 +100,11 @@ export default function AvailabilityMap({ rows }: { rows: HomeRow[] }) {
       if (cancelled || !map) return;
 
       map.eachLayer((layer) => {
-        // Remove old data layers; keep the tile layer (has _url).
-        if ("_url" in layer) return;
+        if ("_url" in layer) return; // keep the tile layer
         map.removeLayer(layer);
       });
 
+      // Only mappable stock points; out-of-stock claims stay list-only.
       const points = rows.filter(
         (r) => r.lat !== null && r.lng !== null && r.availability === "available",
       );
@@ -101,8 +126,21 @@ export default function AvailabilityMap({ rows }: { rows: HomeRow[] }) {
           .addTo(map);
       }
 
-      if (points.length > 0) {
-        map.fitBounds(bounds.pad(0.25), { maxZoom: 15 });
+      if (focusMunicipio && MUNICIPIO_CENTERS[focusMunicipio]) {
+        if (points.length > 0 && bounds.isValid()) {
+          map.fitBounds(bounds.pad(0.25), { maxZoom: 15 });
+        } else {
+          const c = MUNICIPIO_CENTERS[focusMunicipio];
+          map.setView([c.lat, c.lng], 14);
+        }
+      } else if (focusProvincia && focusProvincia !== "La Habana") {
+        // Non-Havana provinces have no bounded region yet; frame whatever exists.
+        if (points.length > 0 && bounds.isValid()) {
+          map.fitBounds(bounds.pad(0.35), { maxZoom: 15 });
+        }
+      } else {
+        // Province-wide view: the whole city extent.
+        map.fitBounds(L.latLngBounds(HAVANA_BOUNDS));
       }
     }
 
@@ -110,7 +148,7 @@ export default function AvailabilityMap({ rows }: { rows: HomeRow[] }) {
     return () => {
       cancelled = true;
     };
-  }, [rows, status]);
+  }, [rows, status, focusMunicipio, focusProvincia]);
 
   return (
     <div className="card-ticket overflow-hidden">
@@ -124,8 +162,14 @@ export default function AvailabilityMap({ rows }: { rows: HomeRow[] }) {
         {status === "loading" && "Cargando mapa…"}
         {status === "error" &&
           "El mapa no pudo cargar. Revisa tu conexión — la lista sigue funcionando."}
-        {status === "ready" &&
-          "Puntos verdes = hay stock ahora · © OpenStreetMap contributors · los tiles quedan en caché"}
+        {status === "ready" && (
+          <>
+            {focusMunicipio
+              ? `Mostrando solo ${focusMunicipio} · `
+              : "Vista provincial · "}
+            Puntos verdes = hay stock · © OpenStreetMap contributors · tiles en caché
+          </>
+        )}
       </div>
     </div>
   );

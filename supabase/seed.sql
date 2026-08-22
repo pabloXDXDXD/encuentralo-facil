@@ -77,18 +77,18 @@ insert into public.stores (id, name, barrio, kind, lat, lng) values
   ('d0000000-00c0-4e00-8000-000000000307','Bodega San Nicolás','Centro Habana','state_market',23.143,-82.377),
   ('d0000000-00c0-4e00-8000-000000000308','MIPYME El Ángel','Centro Habana','mipyme',23.147,-82.379),
   -- Vedado
-  ('d0000000-00c0-4e00-8000-000000000309','Agropecuario 19 y B','Vedado','state_market',23.148,-82.393),
-  ('d0000000-00c0-4e00-8000-000000000310','Mercado La Rampa','Vedado','private_market',23.145,-82.396),
-  ('d0000000-00c0-4e00-8000-000000000311','Bodega Calzada de Loma','Vedado','state_market',23.147,-82.391),
-  ('d0000000-00c0-4e00-8000-000000000312','MIPYME El Vedadito','Vedado','mipyme',23.149,-82.394),
+  ('d0000000-00c0-4e00-8000-000000000309','Agropecuario 19 y B','Plaza de la Revolución','state_market',23.148,-82.393),
+  ('d0000000-00c0-4e00-8000-000000000310','Mercado La Rampa','Plaza de la Revolución','private_market',23.145,-82.396),
+  ('d0000000-00c0-4e00-8000-000000000311','Bodega Calzada de Loma','Plaza de la Revolución','state_market',23.147,-82.391),
+  ('d0000000-00c0-4e00-8000-000000000312','MIPYME El Vedadito','Plaza de la Revolución','mipyme',23.149,-82.394),
   -- Nuevo Vedado
-  ('d0000000-00c0-4e00-8000-000000000313','Mercado Nuevo Vedado','Nuevo Vedado','private_market',23.132,-82.401),
-  ('d0000000-00c0-4e00-8000-000000000314','Bodega Rotonda','Nuevo Vedado','state_market',23.133,-82.403),
-  ('d0000000-00c0-4e00-8000-000000000315','Panadería Nuevo Vedado','Nuevo Vedado','other',23.131,-82.400),
+  ('d0000000-00c0-4e00-8000-000000000313','Mercado Nuevo Vedado','Plaza de la Revolución','private_market',23.132,-82.401),
+  ('d0000000-00c0-4e00-8000-000000000314','Bodega Rotonda','Plaza de la Revolución','state_market',23.133,-82.403),
+  ('d0000000-00c0-4e00-8000-000000000315','Panadería Nuevo Vedado','Plaza de la Revolución','other',23.131,-82.400),
   -- Miramar
-  ('d0000000-00c0-4e00-8000-000000000316','Agropecuario 5ta y 42','Miramar','state_market',23.124,-82.410),
-  ('d0000000-00c0-4e00-8000-000000000317','MIPYME Miramar Gourmet','Miramar','mipyme',23.125,-82.408),
-  ('d0000000-00c0-4e00-8000-000000000318','Caribe Miramar','Miramar','state_market',23.123,-82.412),
+  ('d0000000-00c0-4e00-8000-000000000316','Agropecuario 5ta y 42','Playa','state_market',23.124,-82.410),
+  ('d0000000-00c0-4e00-8000-000000000317','MIPYME Miramar Gourmet','Playa','mipyme',23.125,-82.408),
+  ('d0000000-00c0-4e00-8000-000000000318','Caribe Miramar','Playa','state_market',23.123,-82.412),
   -- Playa
   ('d0000000-00c0-4e00-8000-000000000319','Mercado Cubanacán','Playa','private_market',23.110,-82.425),
   ('d0000000-00c0-4e00-8000-000000000320','Agropecuario Siboney','Playa','state_market',23.112,-82.421),
@@ -99,13 +99,13 @@ insert into public.stores (id, name, barrio, kind, lat, lng) values
   ('d0000000-00c0-4e00-8000-000000000324','Bodega Cerro','Cerro','state_market',23.119,-82.374),
   ('d0000000-00c0-4e00-8000-000000000325','MIPYME El Faro','Cerro','mipyme',23.116,-82.369),
   -- Víbora
-  ('d0000000-00c0-4e00-8000-000000000326','Mercado Víbora','Víbora','private_market',23.104,-82.372),
-  ('d0000000-00c0-4e00-8000-000000000327','Bodega Santa Catalina','Víbora','state_market',23.105,-82.370),
-  ('d0000000-00c0-4e00-8000-000000000328','MIPYME El Trigal','Víbora','mipyme',23.103,-82.374),
+  ('d0000000-00c0-4e00-8000-000000000326','Mercado Víbora','Diez de Octubre','private_market',23.104,-82.372),
+  ('d0000000-00c0-4e00-8000-000000000327','Bodega Santa Catalina','Diez de Octubre','state_market',23.105,-82.370),
+  ('d0000000-00c0-4e00-8000-000000000328','MIPYME El Trigal','Diez de Octubre','mipyme',23.103,-82.374),
   -- Santos Suárez
-  ('d0000000-00c0-4e00-8000-000000000329','Agropecuario Dolores','Santos Suárez','state_market',23.092,-82.362),
-  ('d0000000-00c0-4e00-8000-000000000330','Bodega Acosta','Santos Suárez','state_market',23.093,-82.361),
-  ('d0000000-00c0-4e00-8000-000000000331','MIPYME Santos Market','Santos Suárez','mipyme',23.091,-82.363),
+  ('d0000000-00c0-4e00-8000-000000000329','Agropecuario Dolores','Diez de Octubre','state_market',23.092,-82.362),
+  ('d0000000-00c0-4e00-8000-000000000330','Bodega Acosta','Diez de Octubre','state_market',23.093,-82.361),
+  ('d0000000-00c0-4e00-8000-000000000331','MIPYME Santos Market','Diez de Octubre','mipyme',23.091,-82.363),
   -- Diez de Octubre
   ('d0000000-00c0-4e00-8000-000000000332','Mercado Jesús del Monte','Diez de Octubre','private_market',23.098,-82.383),
   ('d0000000-00c0-4e00-8000-000000000333','Bodega Luyanó','Diez de Octubre','state_market',23.099,-82.381),

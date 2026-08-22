@@ -1,4 +1,4 @@
-import { pool } from "./db";
+import { query } from "./db";
 
 export type Availability = "available" | "out_of_stock";
 
@@ -28,17 +28,20 @@ function normalize(rows: RawAvailabilityRow[]): AvailabilityRow[] {
   return rows.map((r) => ({ ...r, reporter_count: Number(r.reporter_count) }));
 }
 
-/** Current availability snapshot. barrio=null -> whole city. */
-export async function getAvailability(barrio?: string | null) {
-  const { rows } = await pool.query<RawAvailabilityRow>(
-    "select * from public.get_active_availability($1)",
-    [barrio ?? null],
+/** Current availability snapshot. null filters -> whole country. */
+export async function getAvailability(
+  barrio?: string | null,
+  province?: string | null,
+) {
+  const { rows } = await query<RawAvailabilityRow>(
+    "select * from public.get_active_availability($1,$2)",
+    [barrio ?? null, province ?? null],
   );
   return normalize(rows);
 }
 
 export async function getStoreAvailability(storeId: string) {
-  const { rows } = await pool.query<RawAvailabilityRow>(
+  const { rows } = await query<RawAvailabilityRow>(
     "select * from public.get_active_availability(null) where store_id = $1",
     [storeId],
   );
@@ -74,7 +77,7 @@ export type SubmitVoteResult = {
 };
 
 export async function submitVote(input: SubmitVoteInput): Promise<SubmitVoteResult> {
-  const { rows } = await pool.query<{ result: SubmitVoteResult }>(
+  const { rows } = await query<{ result: SubmitVoteResult }>(
     "select public.submit_vote($1,$2,$3) as result",
     [input.reportId, input.vote, input.deviceHash],
   );
@@ -82,7 +85,7 @@ export async function submitVote(input: SubmitVoteInput): Promise<SubmitVoteResu
 }
 
 export async function submitReport(input: SubmitReportInput): Promise<SubmitReportResult> {
-  const { rows } = await pool.query<{ result: SubmitReportResult }>(
+  const { rows } = await query<{ result: SubmitReportResult }>(
     "select public.submit_report($1,$2,$3,$4,$5,$6,$7) as result",
     [
       input.storeId,
@@ -105,7 +108,7 @@ export type StoreSummary = {
 };
 
 export async function searchStores(q?: string | null, barrio?: string | null) {
-  const { rows } = await pool.query<StoreSummary>(
+  const { rows } = await query<StoreSummary>(
     `select id, name, barrio, kind
        from public.stores
       where status = 'active'
@@ -119,7 +122,7 @@ export async function searchStores(q?: string | null, barrio?: string | null) {
 }
 
 export async function createStore(name: string, barrio: string, kind: string) {
-  const { rows } = await pool.query<{
+  const { rows } = await query<{
     result: { ok: boolean; error?: string; existing?: boolean; store_id?: string };
   }>("select public.create_pending_store($1,$2,$3,null,null) as result", [
     name,
@@ -144,7 +147,7 @@ export type CatalogCategory = {
 };
 
 export async function getCatalog(): Promise<CatalogCategory[]> {
-  const { rows } = await pool.query<{
+  const { rows } = await query<{
     cat_id: string;
     cat_name: string;
     cat_emoji: string;
@@ -173,22 +176,32 @@ export async function getCatalog(): Promise<CatalogCategory[]> {
   return categories;
 }
 
-export async function listBarrios(): Promise<string[]> {
-  const { rows } = await pool.query<{ barrio: string }>(
-    `select distinct barrio from public.stores where status = 'active' order by barrio`,
+export async function listBarrios(province?: string | null): Promise<string[]> {
+  const { rows } = await query<{ barrio: string }>(
+    `select distinct barrio from public.stores
+      where status = 'active' and ($1::text is null or province = $1)
+      order by barrio`,
+    [province ?? null],
   );
   return rows.map((r) => r.barrio);
 }
 
+export async function listProvinces(): Promise<string[]> {
+  const { rows } = await query<{ province: string }>(
+    `select distinct province from public.stores where status = 'active' order by province`,
+  );
+  return rows.map((r) => r.province);
+}
+
 export async function listProductSlugs(): Promise<string[]> {
-  const { rows } = await pool.query<{ slug: string }>(
+  const { rows } = await query<{ slug: string }>(
     `select slug from public.products where active = true order by slug`,
   );
   return rows.map((r) => r.slug);
 }
 
 export async function getProductBySlug(slug: string) {
-  const { rows } = await pool.query<{
+  const { rows } = await query<{
     id: string;
     slug: string;
     name: string;
@@ -203,7 +216,7 @@ export async function getProductBySlug(slug: string) {
 export async function getStoreById(id: string) {
   const valid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
   if (!valid) return null;
-  const { rows } = await pool.query<{
+  const { rows } = await query<{
     id: string;
     name: string;
     barrio: string;

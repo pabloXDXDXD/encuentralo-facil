@@ -1,24 +1,32 @@
 import HomeView, { type HomeRow } from "@/components/HomeView";
-import { getAvailability, listBarrios } from "@/lib/repo";
+import { getAvailability, listBarrios, listProvinces } from "@/lib/repo";
 
 // Dynamic rendering keeps the freshness banner honest; the service worker
 // provides the offline layer on top of this.
 export const dynamic = "force-dynamic";
 
 type Props = {
-  searchParams?: Promise<{ barrio?: string }>;
+  searchParams?: Promise<{ provincia?: string; municipio?: string; barrio?: string }>;
 };
 
 export default async function Home({ searchParams }: Props) {
   const params = (await searchParams) ?? {};
-  const barrio = params.barrio ?? null;
+  const provincia = params.provincia ?? null;
+  // New param wins; old ?barrio= links keep working.
+  const municipio = params.municipio ?? params.barrio ?? null;
 
-  let barrios: string[] = [];
+  let provinces: string[] = [];
+  let municipios: string[] = [];
   let rows: HomeRow[] = [];
   let offline = false;
   try {
-    const [b, r] = await Promise.all([listBarrios(), getAvailability(barrio)]);
-    barrios = b;
+    const [p, m, r] = await Promise.all([
+      listProvinces(),
+      listBarrios(provincia),
+      getAvailability(municipio, provincia),
+    ]);
+    provinces = p;
+    municipios = m;
     rows = r.map((row) => ({
       ...row,
       last_seen_at: new Date(row.last_seen_at).toISOString(),
@@ -30,6 +38,13 @@ export default async function Home({ searchParams }: Props) {
   }
 
   return (
-    <HomeView rows={rows} barrios={barrios} activeBarrio={barrio} offline={offline} />
+    <HomeView
+      rows={rows}
+      provinces={provinces}
+      municipios={municipios}
+      activeProvincia={provincia}
+      activeMunicipio={municipio}
+      offline={offline}
+    />
   );
 }
