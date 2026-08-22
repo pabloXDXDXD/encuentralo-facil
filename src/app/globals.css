@@ -16,6 +16,8 @@
 --------------------------------------------------------------------------- */
 
 :root {
+  /* Light is the default (and currently only) theme by product decision.
+     Token structure stays so a manual dark toggle can be added later. */
   --paper: #f4f2ec;
   --card: #fdfbf5;
   --ink: #1b1813;
@@ -30,25 +32,6 @@
   --nohay-ink: #991b1b;
   --stamp: #1b1813;
   color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #151310;
-    --card: #201d17;
-    --ink: #ede9de;
-    --ink-soft: #a39c8e;
-    --line: #3a362d;
-    --accent: #ea580c;
-    --accent-hover: #fb923c;
-    --on-accent: #1b1813;
-    --hay-bg: #14301c;
-    --hay-ink: #86dfa0;
-    --nohay-bg: #38181a;
-    --nohay-ink: #f3a8a0;
-    --stamp: #463f33;
-    color-scheme: dark;
-  }
 }
 
 /* Map tokens into Tailwind v4 theme so utilities like bg-card / text-ink exist */
@@ -85,16 +68,6 @@ body {
     transparent 0 16px,
     rgb(27 24 19 / 0.018) 16px 17px
   );
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    background-image: repeating-linear-gradient(
-      -45deg,
-      transparent 0 16px,
-      rgb(255 255 255 / 0.02) 16px 17px
-    );
-  }
 }
 
 .font-display {
@@ -200,6 +173,84 @@ a:focus-visible {
 .rise {
   animation: ticket-rise 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+/* --- Map pins & popups ------------------------------------------------------ */
+.map-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--card);
+  font-size: 15px;
+  line-height: 1;
+  box-shadow: 2px 2px 0 0 var(--stamp);
+}
+
+.map-pin--strong {
+  background: var(--hay-bg);
+}
+
+.map-pin--weak {
+  background: #fdf3d7; /* single unconfirmed report */
+}
+
+/* Leaflet popup restyled as a market ticket */
+.leaflet-popup-content-wrapper {
+  border: 2px solid var(--ink);
+  border-radius: 8px !important;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 4px 4px 0 0 var(--stamp) !important;
+}
+
+.leaflet-popup-tip {
+  background: var(--card);
+  border: 2px solid var(--ink);
+}
+
+.leaflet-popup-content {
+  margin: 10px 12px;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+}
+
+.popup-ticket {
+  min-width: 150px;
+}
+
+.popup-ticket .popup-name {
+  font-weight: 700;
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.popup-ticket .popup-price {
+  font-family: "Anton", "Arial Narrow", Impact, sans-serif;
+  text-transform: uppercase;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--hay-ink);
+  margin-top: 4px;
+}
+
+.popup-ticket .popup-meta {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+/* Hide Leaflet's default corner attribution; credit lives in our legend bar. */
+.leaflet-control-attribution {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
