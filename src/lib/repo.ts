@@ -178,6 +178,13 @@ export async function listBarrios(): Promise<string[]> {
   return rows.map((r) => r.barrio);
 }
 
+export async function listProductSlugs(): Promise<string[]> {
+  const { rows } = await pool.query<{ slug: string }>(
+    `select slug from public.products where active = true order by slug`,
+  );
+  return rows.map((r) => r.slug);
+}
+
 export async function getProductBySlug(slug: string) {
   const { rows } = await pool.query<{
     id: string;

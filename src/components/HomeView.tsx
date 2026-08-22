@@ -46,7 +46,8 @@ function writeSaved(list: string[]) {
   }
 }
 
-export default function HomeView({ rows, barrios, activeBarrio, offline }: Props) {
+export default function HomeView({ rows: initialRows, barrios, activeBarrio, offline }: Props) {
+  const [rows, setRows] = useState<HomeRow[]>(initialRows);
   const [saved, setSaved] = useState<string[]>([]);
   const [filterOn, setFilterOn] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -55,6 +56,34 @@ export default function HomeView({ rows, barrios, activeBarrio, offline }: Props
     setSaved(readSaved());
     setLoaded(true);
   }, []);
+
+  // Freshness loop: poll the snapshot every 60s while the tab is visible.
+  useEffect(() => {
+    let alive = true;
+    async function poll() {
+      if (document.hidden) return;
+      try {
+        const qs = activeBarrio ? `?barrio=${encodeURIComponent(activeBarrio)}` : "";
+        const res = await fetch(`/api/availability${qs}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!alive || !data.ok) return;
+        setRows(
+          (data.rows as HomeRow[]).map((r) => ({
+            ...r,
+            last_seen_at: new Date(r.last_seen_at).toISOString(),
+          })),
+        );
+      } catch {
+        /* offline -> keep showing what we have */
+      }
+    }
+    const timer = setInterval(poll, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [activeBarrio]);
 
   function toggleSave(slug: string) {
     const next = saved.includes(slug) ? saved.filter((s) => s !== slug) : [...saved, slug];
