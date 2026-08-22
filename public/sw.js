@@ -3,7 +3,7 @@
 //   navigations            -> network-first, cache fallback, shell last resort
 //   /api/availability|products -> network-first, cache fallback
 //   immutable _next/static -> cache-first
-const CACHE = "dh-v2";
+const CACHE = "dh-v3";
 const SHELL = ["/", "/reportar", "/como-funciona"];
 
 self.addEventListener("install", (event) => {
@@ -59,6 +59,12 @@ self.addEventListener("fetch", (event) => {
 
   // OSM tiles: cache-first — the city gets stored, revisits cost 0 data.
   if (url.hostname === "tile.openstreetmap.org") {
+    event.respondWith(cacheFirst(req));
+    return;
+  }
+
+  // Municipality boundaries from Overpass: fetched once per municipio, ever.
+  if (url.hostname === "overpass-api.de" && url.pathname === "/api/interpreter") {
     event.respondWith(cacheFirst(req));
     return;
   }
