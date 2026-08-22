@@ -10,6 +10,7 @@ type Body = {
   availability?: unknown;
   priceCup?: unknown;
   comment?: unknown;
+  queueLevel?: unknown;
 };
 
 export async function POST(req: Request) {
@@ -49,6 +50,15 @@ export async function POST(req: Request) {
       ? body.comment.trim().slice(0, 200)
       : null;
 
+  let queueLevel: number | null = null;
+  if (body.queueLevel !== null && body.queueLevel !== undefined && body.queueLevel !== "") {
+    const q = Number(body.queueLevel);
+    if (!Number.isInteger(q) || q < 1 || q > 3) {
+      return NextResponse.json({ ok: false, error: "invalid_queue" }, { status: 400 });
+    }
+    queueLevel = q;
+  }
+
   // The DB function returns a verdict for every expected condition
   // (rate limits, duplicates); only infrastructure errors throw.
   try {
@@ -59,6 +69,7 @@ export async function POST(req: Request) {
       priceCup,
       comment,
       deviceHash,
+      queueLevel,
     });
     return NextResponse.json(result);
   } catch {

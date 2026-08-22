@@ -24,3 +24,10 @@ const KIND_LABELS: Record<string, string> = {
 export function kindLabel(kind: string): string {
   return KIND_LABELS[kind] ?? "Tienda";
 }
+
+const QUEUE_LABELS = ["", "🟢 Cola corta", "🟡 Cola media", "🔴 Cola larga"];
+
+export function queueLabel(level: number | null | undefined): string {
+  if (!level) return "";
+  return QUEUE_LABELS[level] ?? "";
+}

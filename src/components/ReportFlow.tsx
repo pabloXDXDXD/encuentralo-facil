@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { outboxAdd } from "@/lib/outbox";
 import { getDeviceId } from "@/lib/client-device";
+import { queueLabel } from "@/lib/format";
 import type { Availability } from "@/lib/repo-types";
 
 type CatalogProduct = { id: string; slug: string; name: string; emoji: string };
@@ -25,6 +26,10 @@ export default function ReportFlow({ barrios }: Props) {
   const [availability, setAvailability] = useState<Availability>("available");
   const [price, setPrice] = useState("");
   const [comment, setComment] = useState("");
+  const [queue, setQueue] = useState<number | null>(null);
+  const [stats, setStats] = useState<{ reports: number; votes: number; points: number } | null>(
+    null,
+  );
   const [creatingStore, setCreatingStore] = useState(false);
   const [newStoreName, setNewStoreName] = useState("");
   const [status, setStatus] = useState<
@@ -38,6 +43,14 @@ export default function ReportFlow({ barrios }: Props) {
       .then((r) => r.json())
       .then((d) => setCatalog(d.categories ?? []))
       .catch(() => setCatalog([]));
+  }, []);
+
+  // Contribution stats for this device.
+  useEffect(() => {
+    fetch("/api/me", { headers: { "x-device-id": getDeviceId() } })
+      .then((r) => r.json())
+      .then((d) => setStats(d.stats ?? null))
+      .catch(() => setStats(null));
   }, []);
 
   // Load stores whenever the barrio filter changes.
@@ -102,6 +115,7 @@ export default function ReportFlow({ barrios }: Props) {
       availability,
       priceCup: price.trim() === "" ? null : Number(price),
       comment: comment.trim() || null,
+      queueLevel: availability === "available" ? queue : null,
     };
 
     const deviceId = getDeviceId();
@@ -117,13 +131,13 @@ export default function ReportFlow({ barrios }: Props) {
         availability: payload.availability as Availability,
         priceCup: payload.priceCup,
         comment: payload.comment,
+        queueLevel: payload.queueLevel,
         createdAt: Date.now(),
       });
       setStatus({ kind: "queued", offline: true });
       resetAfterDelay();
       return;
     }
-
     try {
       const res = await fetch("/api/reports", {
         method: "POST",
@@ -151,6 +165,7 @@ export default function ReportFlow({ barrios }: Props) {
           availability: payload.availability as Availability,
           priceCup: payload.priceCup,
           comment: payload.comment,
+          queueLevel: payload.queueLevel,
           createdAt: Date.now(),
         });
         setStatus({ kind: "queued", offline: true });
@@ -165,6 +180,7 @@ export default function ReportFlow({ barrios }: Props) {
         availability: payload.availability as Availability,
         priceCup: payload.priceCup,
         comment: payload.comment,
+        queueLevel: payload.queueLevel,
         createdAt: Date.now(),
       });
       setStatus({ kind: "queued", offline: true });
@@ -180,6 +196,7 @@ export default function ReportFlow({ barrios }: Props) {
       setStore(null);
       setPrice("");
       setComment("");
+      setQueue(null);
     }, 1800);
   }
 
@@ -213,6 +230,13 @@ export default function ReportFlow({ barrios }: Props) {
         <li>›</li>
         <li className={step === "confirm" ? "text-amber-700" : ""}>3 · Confirmar</li>
       </ol>
+
+      {stats && (
+        <p className="rounded-lg bg-stone-100 px-3 py-2 text-xs text-stone-600">
+          Tu aporte: {stats.reports} reportes · {stats.votes} votos ·{" "}
+          <b>{stats.points} puntos</b> ⭐
+        </p>
+      )}
 
       {error && (
         <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>
@@ -371,16 +395,38 @@ export default function ReportFlow({ barrios }: Props) {
           </div>
 
           {availability === "available" && (
-            <label className="block">
-              <span className="px-1 text-sm text-stone-500">Precio (opcional, CUP)</span>
-              <input
-                value={price}
-                onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, ""))}
-                inputMode="numeric"
-                placeholder="$"
-                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-lg"
-              />
-            </label>
+            <>
+              <label className="block">
+                <span className="px-1 text-sm text-stone-500">Precio (opcional, CUP)</span>
+                <input
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, ""))}
+                  inputMode="numeric"
+                  placeholder="$"
+                  className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-lg"
+                />
+              </label>
+
+              <div>
+                <span className="px-1 text-sm text-stone-500">¿Hay cola? (opcional)</span>
+                <div className="mt-1 grid grid-cols-3 gap-2">
+                  {[1, 2, 3].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setQueue(queue === n ? null : n)}
+                      className={`rounded-xl border-2 p-2 text-center text-xs font-semibold ${
+                        queue === n
+                          ? "border-amber-600 bg-amber-50 text-amber-800"
+                          : "border-stone-200 bg-white text-stone-500"
+                      }`}
+                    >
+                      {queueLabel(n)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
 
           <label className="block">

@@ -15,6 +15,7 @@ export type AvailabilityRow = {
   last_seen_at: string | Date;
   freshness: string;
   latest_report_id: string;
+  queue_level: number | null;
 };
 
 type RawAvailabilityRow = Omit<AvailabilityRow, "reporter_count"> & {
@@ -49,6 +50,7 @@ export type SubmitReportInput = {
   priceCup?: number | null;
   comment?: string | null;
   deviceHash: string;
+  queueLevel?: number | null;
 };
 
 export type SubmitReportResult = {
@@ -79,7 +81,7 @@ export async function submitVote(input: SubmitVoteInput): Promise<SubmitVoteResu
 
 export async function submitReport(input: SubmitReportInput): Promise<SubmitReportResult> {
   const { rows } = await pool.query<{ result: SubmitReportResult }>(
-    "select public.submit_report($1,$2,$3,$4,$5,$6) as result",
+    "select public.submit_report($1,$2,$3,$4,$5,$6,$7) as result",
     [
       input.storeId,
       input.productId,
@@ -87,6 +89,7 @@ export async function submitReport(input: SubmitReportInput): Promise<SubmitRepo
       input.priceCup ?? null,
       input.comment ?? null,
       input.deviceHash,
+      input.queueLevel ?? null,
     ],
   );
   return rows[0].result;

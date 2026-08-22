@@ -11,6 +11,7 @@ export type OutboxEntry = {
   availability: Availability;
   priceCup: number | null;
   comment: string | null;
+  queueLevel: number | null;
   createdAt: number;
 };
 
@@ -102,6 +103,7 @@ export async function flushOutbox(deviceId: string): Promise<void> {
           availability: entry.availability,
           priceCup: entry.priceCup,
           comment: entry.comment,
+          queueLevel: entry.queueLevel,
         }),
       });
       if (!res.ok) continue; // transient server issue -> retry later
