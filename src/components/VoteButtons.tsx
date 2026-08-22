@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Check, X } from "@phosphor-icons/react";
 import { getDeviceId } from "@/lib/client-device";
 
 const KEY = "dh_voted_reports";
@@ -67,11 +68,15 @@ export default function VoteButtons({ reportId }: Props) {
   }
 
   if (limitHit) {
-    return <span className="text-xs text-stone-400">Límite de votos por hoy</span>;
+    return <span className="text-xs font-semibold text-ink-soft">Límite de votos por hoy</span>;
   }
 
   if (voted) {
-    return <span className="text-xs text-emerald-700">✓ Gracias</span>;
+    return (
+      <span className="stamp stamp-hay text-xs normal-case" style={{ transform: "none" }}>
+        ✓ Gracias
+      </span>
+    );
   }
 
   return (
@@ -81,18 +86,20 @@ export default function VoteButtons({ reportId }: Props) {
         aria-label="Confirmar"
         disabled={busy}
         onClick={() => send("confirm")}
-        className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800 active:bg-emerald-200"
+        className="btn btn-ghost rounded-full px-2.5 py-0.5 text-xs font-bold text-hay-ink"
       >
-        ✓ Yo también lo vi
+        <Check size={12} weight="bold" aria-hidden />
+        Lo vi
       </button>
       <button
         type="button"
         aria-label="Desmentir"
         disabled={busy}
         onClick={() => send("deny")}
-        className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 active:bg-red-200"
+        className="btn btn-ghost rounded-full px-2.5 py-0.5 text-xs font-bold text-nohay-ink"
       >
-        ✗ Ya no hay
+        <X size={12} weight="bold" aria-hidden />
+        Ya no hay
       </button>
     </>
   );

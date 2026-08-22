@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { Check, CheckCircle, Tray, X } from "@phosphor-icons/react";
 import { outboxAdd } from "@/lib/outbox";
 import { getDeviceId } from "@/lib/client-device";
+import { ProductIcon } from "@/lib/product-icons";
 import { queueLabel } from "@/lib/format";
 import type { Availability } from "@/lib/repo-types";
 
@@ -207,12 +209,16 @@ export default function ReportFlow({ barrios }: Props) {
 
   if (status.kind === "queued") {
     return (
-      <div className="rounded-xl bg-emerald-50 p-8 text-center">
-        <p className="text-4xl">{status.offline ? "📥" : "✅"}</p>
-        <p className="mt-2 text-lg font-bold">
+      <div className="card-ticket rise p-8 text-center">
+        {status.offline ? (
+          <Tray aria-hidden size={44} className="mx-auto text-accent" weight="duotone" />
+        ) : (
+          <CheckCircle aria-hidden size={44} className="mx-auto text-hay-ink" weight="fill" />
+        )}
+        <p className="mt-2 font-display text-xl">
           {status.offline ? "Guardado sin conexión" : "¡Reporte enviado!"}
         </p>
-        <p className="mt-1 text-sm text-stone-600">
+        <p className="mt-1 text-sm text-ink-soft">
           {status.offline
             ? "Se enviará solo cuando vuelva internet."
             : "Gracias por ayudar a tu barrio."}
@@ -223,23 +229,23 @@ export default function ReportFlow({ barrios }: Props) {
 
   return (
     <div className="space-y-4">
-      <ol className="flex items-center gap-2 px-1 text-xs font-semibold uppercase tracking-wide text-stone-400">
-        <li className={step === "product" ? "text-amber-700" : ""}>1 · Producto</li>
+      <ol className="flex items-center gap-2 px-1 font-display text-sm tracking-wide text-line">
+        <li className={step === "product" ? "text-accent" : ""}>1 · Producto</li>
         <li>›</li>
-        <li className={step === "store" ? "text-amber-700" : ""}>2 · Tienda</li>
+        <li className={step === "store" ? "text-accent" : ""}>2 · Tienda</li>
         <li>›</li>
-        <li className={step === "confirm" ? "text-amber-700" : ""}>3 · Confirmar</li>
+        <li className={step === "confirm" ? "text-accent" : ""}>3 · Confirmar</li>
       </ol>
 
       {stats && (
-        <p className="rounded-lg bg-stone-100 px-3 py-2 text-xs text-stone-600">
+        <p className="card-flat px-3 py-2 text-xs text-ink-soft">
           Tu aporte: {stats.reports} reportes · {stats.votes} votos ·{" "}
-          <b>{stats.points} puntos</b> ⭐
+          <b className="font-display">{stats.points} pts</b> ⭐
         </p>
       )}
 
       {error && (
-        <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>
+        <p className="card-flat px-3 py-3 text-sm font-semibold text-nohay-ink">{error}</p>
       )}
 
       {step === "product" && (
@@ -248,13 +254,13 @@ export default function ReportFlow({ barrios }: Props) {
             value={productQuery}
             onChange={(e) => setProductQuery(e.target.value)}
             placeholder="Buscar producto…"
-            className="w-full rounded-lg border border-stone-300 px-3 py-2"
+            className="w-full rounded-md border-2 border-ink bg-card px-3 py-2"
             inputMode="search"
           />
           {filteredProducts.map((cat) =>
             cat.products.length === 0 ? null : (
               <div key={cat.id}>
-                <h3 className="px-1 pb-1 pt-2 text-sm font-semibold text-stone-500">
+                <h3 className="px-1 pb-1 pt-2 font-display text-sm tracking-wide text-ink-soft">
                   {cat.emoji} {cat.name}
                 </h3>
                 <div className="grid grid-cols-3 gap-2">
@@ -266,9 +272,9 @@ export default function ReportFlow({ barrios }: Props) {
                         setProduct(p);
                         setStep("store");
                       }}
-                      className="flex flex-col items-center gap-1 rounded-xl border border-stone-200 bg-white p-3 active:bg-amber-50"
+                      className="btn btn-ghost flex-col gap-1 rounded-md p-3"
                     >
-                      <span className="text-2xl">{p.emoji}</span>
+                      <ProductIcon slug={p.slug} size={28} />
                       <span className="text-center text-xs leading-tight">{p.name}</span>
                     </button>
                   ))}
@@ -277,7 +283,7 @@ export default function ReportFlow({ barrios }: Props) {
             ),
           )}
           {catalog.length === 0 && (
-            <p className="rounded-lg bg-stone-100 p-4 text-center text-sm text-stone-500">
+            <p className="card-flat p-4 text-center text-sm text-ink-soft">
               Catálogo no disponible ahora mismo.
             </p>
           )}
@@ -286,13 +292,13 @@ export default function ReportFlow({ barrios }: Props) {
 
       {step === "store" && product && (
         <section className="space-y-3">
-          <p className="rounded-lg bg-amber-50 p-3 text-sm">
+          <p className="card-flat px-3 py-3 text-sm">
             ¿En qué tienda hay <b>{product.name}</b>?
           </p>
           <select
             value={storeBarrio}
             onChange={(e) => setStoreBarrio(e.target.value)}
-            className="w-full rounded-lg border border-stone-300 px-3 py-2"
+            className="w-full rounded-md border-2 border-ink bg-card px-3 py-2"
           >
             {barrios.map((b) => (
               <option key={b} value={b}>
@@ -304,10 +310,10 @@ export default function ReportFlow({ barrios }: Props) {
             value={storeQuery}
             onChange={(e) => setStoreQuery(e.target.value)}
             placeholder="Buscar tienda…"
-            className="w-full rounded-lg border border-stone-300 px-3 py-2"
+            className="w-full rounded-md border-2 border-ink bg-card px-3 py-2"
             inputMode="search"
           />
-          <ul className="divide-y divide-stone-100 overflow-hidden rounded-xl border border-stone-200 bg-white">
+          <ul className="card-flat divide-y-2 divide-dashed divide-line overflow-hidden rounded-md">
             {visibleStores.map((s) => (
               <li key={s.id}>
                 <button
@@ -316,7 +322,7 @@ export default function ReportFlow({ barrios }: Props) {
                     setStore({ storeId: s.id, storeName: s.name });
                     setStep("confirm");
                   }}
-                  className="block w-full px-4 py-3 text-left active:bg-amber-50"
+                  className="block w-full px-4 py-3 text-left font-semibold hover:bg-paper"
                 >
                   {s.name}
                 </button>
@@ -324,25 +330,25 @@ export default function ReportFlow({ barrios }: Props) {
             ))}
           </ul>
           {creatingStore ? (
-            <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
+            <div className="space-y-2 rounded-md border-2 border-accent bg-card p-3">
               <input
                 value={newStoreName}
                 onChange={(e) => setNewStoreName(e.target.value)}
                 placeholder={`Nombre de la tienda (${storeBarrio})`}
-                className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                className="w-full rounded-md border-2 border-ink bg-card px-3 py-2"
               />
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={createCommunityStore}
-                  className="flex-1 rounded-full bg-amber-600 py-2 font-semibold text-white"
+                  className="btn btn-primary flex-1 rounded-md py-2"
                 >
                   Crear y seguir
                 </button>
                 <button
                   type="button"
                   onClick={() => setCreatingStore(false)}
-                  className="rounded-full border border-stone-300 px-4 py-2"
+                  className="btn btn-ghost rounded-md px-4 py-2 text-sm"
                 >
                   Cancelar
                 </button>
@@ -352,7 +358,7 @@ export default function ReportFlow({ barrios }: Props) {
             <button
               type="button"
               onClick={() => setCreatingStore(true)}
-              className="w-full rounded-full border border-dashed border-stone-400 py-2 text-sm text-stone-600"
+              className="btn btn-ghost w-full justify-center rounded-md border-dashed py-2 text-sm text-ink-soft"
             >
               + No está en la lista — agregar tienda
             </button>
@@ -362,8 +368,8 @@ export default function ReportFlow({ barrios }: Props) {
 
       {step === "confirm" && product && store && (
         <section className="space-y-4">
-          <div className="rounded-xl border border-stone-200 bg-white p-4">
-            <p className="text-sm text-stone-500">Reportando</p>
+          <div className="card-flat p-4">
+            <p className="text-sm text-ink-soft">Reportando</p>
             <p className="font-semibold">
               {product.emoji} {product.name} · {store.storeName}
             </p>
@@ -373,52 +379,54 @@ export default function ReportFlow({ barrios }: Props) {
             <button
               type="button"
               onClick={() => setAvailability("available")}
-              className={`rounded-xl border-2 p-4 text-center font-bold ${
+              className={`rounded-md border-2 p-4 text-center font-bold transition-transform active:translate-y-[1px] ${
                 availability === "available"
-                  ? "border-emerald-600 bg-emerald-50 text-emerald-800"
-                  : "border-stone-200 bg-white text-stone-400"
+                  ? "border-hay-ink bg-hay-bg text-hay-ink shadow-[3px_3px_0_0_var(--stamp)]"
+                  : "border-line bg-card text-ink-soft"
               }`}
             >
-              ✅ Hay
+              <Check size={18} weight="bold" className="mx-auto mb-1" aria-hidden />
+              Hay
             </button>
             <button
               type="button"
               onClick={() => setAvailability("out_of_stock")}
-              className={`rounded-xl border-2 p-4 text-center font-bold ${
+              className={`rounded-md border-2 p-4 text-center font-bold transition-transform active:translate-y-[1px] ${
                 availability === "out_of_stock"
-                  ? "border-red-500 bg-red-50 text-red-700"
-                  : "border-stone-200 bg-white text-stone-400"
+                  ? "border-nohay-ink bg-nohay-bg text-nohay-ink shadow-[3px_3px_0_0_var(--stamp)]"
+                  : "border-line bg-card text-ink-soft"
               }`}
             >
-              ❌ Ya no hay
+              <X size={18} weight="bold" className="mx-auto mb-1" aria-hidden />
+              Ya no hay
             </button>
           </div>
 
           {availability === "available" && (
             <>
               <label className="block">
-                <span className="px-1 text-sm text-stone-500">Precio (opcional, CUP)</span>
+                <span className="px-1 text-sm text-ink-soft">Precio (opcional, CUP)</span>
                 <input
                   value={price}
                   onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, ""))}
                   inputMode="numeric"
                   placeholder="$"
-                  className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-lg"
+                  className="mt-1 w-full rounded-md border-2 border-ink bg-card px-3 py-2 font-display text-xl"
                 />
               </label>
 
               <div>
-                <span className="px-1 text-sm text-stone-500">¿Hay cola? (opcional)</span>
+                <span className="px-1 text-sm text-ink-soft">¿Hay cola? (opcional)</span>
                 <div className="mt-1 grid grid-cols-3 gap-2">
                   {[1, 2, 3].map((n) => (
                     <button
                       key={n}
                       type="button"
                       onClick={() => setQueue(queue === n ? null : n)}
-                      className={`rounded-xl border-2 p-2 text-center text-xs font-semibold ${
+                      className={`rounded-md border-2 p-2 text-center text-xs font-semibold ${
                         queue === n
-                          ? "border-amber-600 bg-amber-50 text-amber-800"
-                          : "border-stone-200 bg-white text-stone-500"
+                          ? "border-accent bg-card text-accent shadow-[3px_3px_0_0_var(--stamp)]"
+                          : "border-line bg-card text-ink-soft"
                       }`}
                     >
                       {queueLabel(n)}
@@ -430,14 +438,14 @@ export default function ReportFlow({ barrios }: Props) {
           )}
 
           <label className="block">
-            <span className="px-1 text-sm text-stone-500">Comentario (opcional)</span>
+            <span className="px-1 text-sm text-ink-soft">Comentario (opcional)</span>
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value.slice(0, 200))}
               rows={2}
               maxLength={200}
               placeholder="Ej: por libra, hacen fila temprano…"
-              className="mt-1 w-full resize-none rounded-lg border border-stone-300 px-3 py-2"
+              className="mt-1 w-full resize-none rounded-md border-2 border-ink bg-card px-3 py-2"
             />
           </label>
 
@@ -446,14 +454,14 @@ export default function ReportFlow({ barrios }: Props) {
               type="button"
               disabled={status.kind === "sending"}
               onClick={submit}
-              className="flex-1 rounded-full bg-amber-600 py-3 font-bold text-white disabled:opacity-60"
+              className="btn btn-primary flex-1 rounded-md py-3 disabled:opacity-60"
             >
               {status.kind === "sending" ? "Enviando…" : "Enviar reporte"}
             </button>
             <button
               type="button"
               onClick={() => setStep("store")}
-              className="rounded-full border border-stone-300 px-5 py-3 text-sm"
+              className="btn btn-ghost rounded-md px-5 py-3 text-sm"
             >
               Atrás
             </button>
@@ -461,7 +469,7 @@ export default function ReportFlow({ barrios }: Props) {
         </section>
       )}
 
-      <p className="pt-2 text-center text-xs text-stone-400">
+      <p className="pt-2 text-center text-xs text-ink-soft">
         Sin cuenta, sin registro.{" "}
         <Link href="/como-funciona" className="underline">
           Cómo funciona

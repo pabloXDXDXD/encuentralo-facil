@@ -11,6 +11,7 @@
     "db:ping": "node scripts/db.mjs ping"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "dotenv": "^16",
     "next": "^15",
     "pg": "^8",

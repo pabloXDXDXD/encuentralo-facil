@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAvailability, getProductBySlug } from "@/lib/repo";
-import { formatPrice, timeAgo } from "@/lib/format";
+import { formatPrice, queueLabel, timeAgo } from "@/lib/format";
+import { ProductIcon } from "@/lib/product-icons";
 
 export const dynamic = "force-dynamic";
 
@@ -31,41 +32,48 @@ export default async function ProductPage({ params }: Props) {
   return (
     <div className="space-y-3">
       <header className="flex items-center gap-3 px-1">
-        <span className="text-3xl">{product.emoji}</span>
+        <span
+          aria-hidden
+          className="flex h-12 w-12 items-center justify-center rounded-md border-2 border-ink bg-card shadow-[3px_3px_0_0_var(--stamp)]"
+        >
+          <ProductIcon slug={slug} size={26} />
+        </span>
         <div>
-          <h1 className="text-xl font-bold">{product.name}</h1>
-          <p className="text-xs text-stone-500">Disponibilidad de las últimas 6 horas</p>
+          <h1 className="font-display text-xl leading-tight">{product.name}</h1>
+          <p className="text-xs text-ink-soft">Disponibilidad de las últimas 6 horas</p>
         </div>
       </header>
 
       {rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-stone-300 p-6 text-center text-sm text-stone-500">
+        <div className="card-ticket p-6 text-center text-sm text-ink-soft">
           Nadie ha reportado este producto recientemente.
         </div>
       ) : (
-        rows.map((row) => (
+        rows.map((row, i) => (
           <article
             key={row.store_id}
-            className="flex items-center gap-3 rounded-xl border border-stone-200 bg-white p-3"
+            className="card-ticket rise flex items-center gap-3 p-3"
+            style={{ "--i": i } as React.CSSProperties}
           >
             <div className="min-w-0 flex-1">
               <p className="truncate font-semibold">
-                {row.store_name}
-                {row.price_from !== null && (
-                  <span className="ml-2 font-bold text-emerald-700">
-                    {formatPrice(row.price_from)}
-                  </span>
-                )}
+                <Link href={`/tienda/${row.store_id}`} className="hover:underline">
+                  {row.store_name}
+                </Link>
               </p>
-              <p className="truncate text-xs text-stone-500">
+              <p className="truncate text-xs text-ink-soft">
                 {row.barrio} · {timeAgo(row.last_seen_at)}
+                {row.queue_level && ` · ${queueLabel(row.queue_level)}`}
               </p>
             </div>
+            {row.availability === "available" && row.price_from !== null && (
+              <span className="font-display text-xl text-hay-ink">
+                {formatPrice(row.price_from)}
+              </span>
+            )}
             <span
-              className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                row.availability === "available"
-                  ? "bg-emerald-100 text-emerald-800"
-                  : "bg-red-100 text-red-700"
+              className={`stamp text-sm ${
+                row.availability === "available" ? "stamp-hay -rotate-2" : "stamp-nohay rotate-2"
               }`}
             >
               {row.availability === "available" ? "Hay" : "No hay"}
@@ -74,10 +82,7 @@ export default async function ProductPage({ params }: Props) {
         ))
       )}
 
-      <Link
-        href={`/reportar`}
-        className="block rounded-full bg-amber-600 py-3 text-center font-bold text-white"
-      >
+      <Link href="/reportar" className="btn btn-primary w-full rounded-md py-3 text-center">
         Reportar dónde hay {product.name.toLowerCase()}
       </Link>
     </div>

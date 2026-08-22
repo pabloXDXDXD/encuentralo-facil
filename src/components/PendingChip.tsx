@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Spinner } from "@phosphor-icons/react";
 import { flushOutbox, outboxCount } from "@/lib/outbox";
 import { getDeviceId } from "@/lib/client-device";
 
@@ -48,8 +49,8 @@ export default function PendingChip() {
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 flex justify-center p-3">
-      <div className="flex items-center gap-2 rounded-full bg-stone-800 px-4 py-2 text-sm text-white shadow-lg">
-        <span className="animate-pulse">⏳</span>
+      <div className="btn flex items-center gap-2 rounded-md bg-ink px-4 py-2 text-sm font-bold text-paper shadow-[4px_4px_0_0_var(--accent)]">
+        <Spinner aria-hidden className="animate-spin text-accent" size={16} />
         <span>
           {count === 1 ? "1 reporte pendiente" : `${count} reportes pendientes`} de enviar
         </span>

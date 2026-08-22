@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { Basket, Star } from "@phosphor-icons/react";
 import VoteButtons from "@/components/VoteButtons";
+import { ProductIcon } from "@/lib/product-icons";
 import { formatPrice, queueLabel, timeAgo } from "@/lib/format";
 
 const SAVED_KEY = "dh_saved_products";
@@ -91,10 +93,12 @@ export default function HomeView({ rows: initialRows, barrios, activeBarrio, off
     writeSaved(next);
   }
 
+  const filtering = filterOn && saved.length > 0;
+
   const visibleRows = useMemo(() => {
-    if (!filterOn || saved.length === 0) return rows;
+    if (!filtering) return rows;
     return rows.filter((r) => saved.includes(r.product_slug));
-  }, [rows, filterOn, saved]);
+  }, [rows, filtering, saved]);
 
   const byBarrio = useMemo(() => {
     const map = new Map<string, HomeRow[]>();
@@ -108,13 +112,11 @@ export default function HomeView({ rows: initialRows, barrios, activeBarrio, off
 
   return (
     <div className="space-y-4">
-      <nav className="flex gap-2 overflow-x-auto pb-1">
+      <nav className="flex gap-2 overflow-x-auto pb-1" aria-label="Barrios">
         <Link
           href="/"
-          className={`whitespace-nowrap rounded-full px-3 py-1 text-sm ${
-            activeBarrio === null
-              ? "bg-stone-900 text-white"
-              : "border border-stone-300 bg-white text-stone-600"
+          className={`btn shrink-0 rounded-full px-3 py-1 text-sm font-bold ${
+            activeBarrio === null ? "bg-ink text-paper" : "btn-ghost"
           }`}
         >
           Toda La Habana
@@ -123,10 +125,8 @@ export default function HomeView({ rows: initialRows, barrios, activeBarrio, off
           <Link
             key={b}
             href={`/?barrio=${encodeURIComponent(b)}`}
-            className={`whitespace-nowrap rounded-full px-3 py-1 text-sm ${
-              activeBarrio === b
-                ? "bg-stone-900 text-white"
-                : "border border-stone-300 bg-white text-stone-600"
+            className={`btn shrink-0 rounded-full px-3 py-1 text-sm font-bold ${
+              activeBarrio === b ? "bg-ink text-paper" : "btn-ghost"
             }`}
           >
             {b}
@@ -137,95 +137,133 @@ export default function HomeView({ rows: initialRows, barrios, activeBarrio, off
       <button
         type="button"
         onClick={() => setFilterOn((v) => !v)}
-        className={`w-full rounded-lg px-3 py-2 text-sm font-semibold ${
-          filterOn && saved.length > 0
-            ? "bg-amber-100 text-amber-900"
-            : "border border-dashed border-stone-300 text-stone-500"
+        aria-pressed={filtering}
+        className={`btn w-full justify-between rounded-md px-3 py-2 text-sm ${
+          filtering ? "bg-accent text-on-accent" : "btn-ghost border-dashed"
         }`}
       >
-        ⭐ Mis búsquedas{loaded && saved.length > 0 ? ` (${saved.length})` : ""} —{" "}
-        {filterOn && saved.length > 0 ? "mostrando solo estas" : "tocar para filtrar"}
+        <span>⭐ Mis búsquedas{loaded && saved.length > 0 ? ` (${saved.length})` : ""}</span>
+        <span className="text-xs font-semibold opacity-80">
+          {filtering ? "activado" : "filtrar"}
+        </span>
       </button>
 
       {offline && (
-        <div className="rounded-xl bg-red-50 p-4 text-sm text-red-800">
-          Sin conexión con el servidor. Intenta de nuevo en unos minutos.
+        <div className="card-flat p-4 text-sm">
+          <p className="font-display">Sin conexión</p>
+          <p className="mt-1 text-ink-soft">
+            No llega el servidor. Intenta de nuevo en unos minutos.
+          </p>
         </div>
       )}
 
       {!offline && visibleRows.length === 0 && (
-        <div className="rounded-xl border border-dashed border-stone-300 p-6 text-center">
-          <p className="text-2xl">{filterOn && saved.length === 0 ? "⭐" : "🛒"}</p>
-          <p className="mt-2 font-semibold">
-            {filterOn && saved.length === 0
-              ? "Sin búsquedas guardadas todavía"
-              : "Sin reportes activos aquí todavía"}
+        <div className="card-ticket p-6 text-center" style={{ "--i": 0 } as React.CSSProperties}>
+          <Basket aria-hidden size={44} className="mx-auto text-ink-soft" weight="duotone" />
+          <p className="mt-2 font-display text-xl">
+            {filtering && saved.length === 0
+              ? "Sin búsquedas guardadas"
+              : "Nada reportado aquí aún"}
           </p>
-          <p className="mt-1 text-sm text-stone-500">
-            {filterOn && saved.length === 0
+          <p className="mx-auto mt-1 max-w-xs text-sm text-ink-soft">
+            {filtering && saved.length === 0
               ? "Toca la estrella de un producto para seguirlo."
               : "Los reportes duran 6 horas visibles. Sé quien encienda la zona."}
           </p>
-          <Link
-            href="/reportar"
-            className="mt-3 inline-block rounded-full bg-amber-600 px-4 py-2 text-sm font-semibold text-white"
-          >
+          <Link href="/reportar" className="btn btn-primary mt-4 rounded-md px-4 py-2 text-sm">
             Hacer un reporte
           </Link>
         </div>
       )}
 
       {[...byBarrio.entries()].map(([zone, zoneRows]) => (
-        <section key={zone} className="space-y-2">
-          <h2 className="px-1 text-sm font-semibold uppercase tracking-wide text-stone-400">
-            {zone}
+        <section key={zone} className="space-y-3">
+          <h2 className="flex items-center gap-3">
+            <span className="font-display text-lg leading-none">{zone}</span>
+            <span aria-hidden className="h-0.5 flex-1 bg-line" />
+            <span className="text-xs font-bold text-ink-soft">{zoneRows.length}</span>
           </h2>
-          {zoneRows.map((row) => (
-            <article key={row.store_id + row.product_slug} className="rounded-xl border border-stone-200 bg-white p-3">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  aria-label={saved.includes(row.product_slug) ? "Quitar de búsquedas" : "Guardar búsqueda"}
-                  onClick={() => toggleSave(row.product_slug)}
-                  className="text-xl leading-none"
-                >
-                  {saved.includes(row.product_slug) ? "⭐" : "☆"}
-                </button>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">
-                    <Link href={`/producto/${row.product_slug}`} className="hover:underline">
-                      {row.product_name}
-                    </Link>{" "}
-                    {row.availability === "available" && row.price_from !== null && (
-                      <span className="font-bold text-emerald-700">
-                        {formatPrice(row.price_from)}
-                      </span>
-                    )}
-                  </p>
-                  <p className="truncate text-xs text-stone-500">
-                    {row.store_name} · {timeAgo(row.last_seen_at)}
-                    {row.reporter_count > 1 && ` · ${row.reporter_count} reportes`}
-                    {row.queue_level && ` · ${queueLabel(row.queue_level)}`}
-                  </p>
-                </div>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    row.availability === "available"
-                      ? "bg-emerald-100 text-emerald-800"
-                      : "bg-red-100 text-red-700"
-                  }`}
-                >
-                  {row.availability === "available" ? "Hay" : "No hay"}
-                </span>
-              </div>
-              <div className="mt-2 flex items-center gap-2 border-t border-stone-100 pt-2">
-                <span className="text-xs text-stone-400">¿Lo confirmas?</span>
-                <VoteButtons reportId={row.latest_report_id} />
-              </div>
-            </article>
+          {zoneRows.map((row, i) => (
+            <TicketRow key={row.store_id + row.product_slug} row={row} index={i} saved={saved} onToggleSave={toggleSave} />
           ))}
         </section>
       ))}
     </div>
+  );
+}
+
+type RowProps = {
+  row: HomeRow;
+  index: number;
+  saved: string[];
+  onToggleSave: (slug: string) => void;
+};
+
+function TicketRow({ row, index, saved, onToggleSave }: RowProps) {
+  const available = row.availability === "available";
+  const isSaved = saved.includes(row.product_slug);
+
+  return (
+    <article className="card-ticket rise p-3" style={{ "--i": index } as React.CSSProperties}>
+      <div className="flex items-start gap-3">
+        <button
+          type="button"
+          aria-label={isSaved ? `Quitar ${row.product_name} de búsquedas` : `Guardar ${row.product_name} en búsquedas`}
+          aria-pressed={isSaved}
+          onClick={() => onToggleSave(row.product_slug)}
+          className="transition-transform hover:scale-110"
+        >
+          <Star
+            size={22}
+            weight={isSaved ? "fill" : "regular"}
+            className={isSaved ? "text-accent" : "text-ink-soft"}
+            aria-hidden
+          />
+        </button>
+
+        <ProductIcon slug={row.product_slug} size={30} className="mt-0.5 shrink-0 text-ink" />
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-semibold leading-snug">
+            <Link href={`/producto/${row.product_slug}`} className="hover:underline">
+              {row.product_name}
+            </Link>
+          </p>
+          <p className="truncate text-xs text-ink-soft">{row.store_name}</p>
+          <p className="mt-0.5 text-xs text-ink-soft">
+            {timeAgo(row.last_seen_at)}
+            {row.reporter_count > 1 && ` · ✓ ${row.reporter_count}`}
+            {row.queue_level && (
+              <span className="ml-1 font-semibold text-ink">{queueLabel(row.queue_level)}</span>
+            )}
+          </p>
+        </div>
+
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          {available ? (
+            row.price_from !== null && (
+              <span className="font-display text-2xl leading-none text-hay-ink">
+                {formatPrice(row.price_from)}
+              </span>
+            )
+          ) : null}
+          <span
+            className={`stamp text-sm ${
+              available ? "stamp-hay -rotate-2" : "stamp-nohay rotate-2"
+            }`}
+          >
+            {available ? "Hay" : "No hay"}
+          </span>
+        </div>
+      </div>
+
+      {/* Receipt perforation */}
+      <div aria-hidden className="my-2 border-t-2 border-dashed border-line" />
+
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-ink-soft">¿Lo confirmas?</span>
+        <VoteButtons reportId={row.latest_report_id} />
+      </div>
+    </article>
   );
 }

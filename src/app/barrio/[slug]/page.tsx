@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getAvailability } from "@/lib/repo";
-import { formatPrice, timeAgo } from "@/lib/format";
+import { MapPinAccent } from "@/lib/product-icons";
+import { formatPrice, queueLabel, timeAgo } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -19,38 +20,44 @@ export default async function BarrioPage({ params }: Props) {
 
   return (
     <div className="space-y-3">
-      <h1 className="px-1 text-xl font-bold">📍 {barrio}</h1>
-      <p className="px-1 text-xs text-stone-500">Disponibilidad de las últimas 6 horas</p>
+      <header className="flex items-center gap-2 px-1">
+        <MapPinAccent size={22} />
+        <h1 className="font-display text-xl leading-tight">{barrio}</h1>
+      </header>
+      <p className="-mt-2 px-1 text-xs text-ink-soft">Disponibilidad de las últimas 6 horas</p>
 
       {rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-stone-300 p-6 text-center text-sm text-stone-500">
+        <div className="card-ticket p-6 text-center text-sm text-ink-soft">
           Sin reportes activos en este barrio ahora mismo.
         </div>
       ) : (
-        rows.map((row) => (
+        rows.map((row, i) => (
           <article
             key={row.store_id + row.product_slug}
-            className="flex items-center gap-3 rounded-xl border border-stone-200 bg-white p-3"
+            className="card-ticket rise flex items-center gap-3 p-3"
+            style={{ "--i": i } as React.CSSProperties}
           >
-            <span className="text-2xl">{row.emoji}</span>
             <div className="min-w-0 flex-1">
               <p className="truncate font-semibold">
-                {row.product_name}
-                {row.availability === "available" && row.price_from !== null && (
-                  <span className="ml-2 font-bold text-emerald-700">
-                    {formatPrice(row.price_from)}
-                  </span>
-                )}
+                <Link href={`/producto/${row.product_slug}`} className="hover:underline">
+                  {row.product_name}
+                </Link>
               </p>
-              <p className="truncate text-xs text-stone-500">
+              <p className="truncate text-xs text-ink-soft">
                 {row.store_name} · {timeAgo(row.last_seen_at)}
+                {row.queue_level && ` · ${queueLabel(row.queue_level)}`}
               </p>
             </div>
+            {row.availability === "available" && row.price_from !== null && (
+              <span className="font-display text-lg text-hay-ink">
+                {formatPrice(row.price_from)}
+              </span>
+            )}
           </article>
         ))
       )}
 
-      <Link href="/reportar" className="block rounded-full bg-amber-600 py-3 text-center font-bold text-white">
+      <Link href="/reportar" className="btn btn-primary w-full rounded-md py-3 text-center">
         Hacer un reporte
       </Link>
     </div>
