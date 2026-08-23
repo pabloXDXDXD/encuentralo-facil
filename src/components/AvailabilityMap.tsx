@@ -8,123 +8,83 @@ import { Crosshair } from "@phosphor-icons/react";
 import { MUNICIPIO_CENTERS, regionFor } from "@/lib/geo";
 import { ProductIcon } from "@/lib/product-icons";
 import { timeAgo } from "@/lib/format";
-import type { HomeRow } from "@/components/HomeView";
 
 /**
- * OpenStreetMap view of availability points.
- * - Camera locked to the selected province region.
- * - Marker confidence: solid green = confirmed (2+ reporters or <30 min old),
- *   cream = single report. Out-of-stock claims are list-only by design.
- * - No boundary overlays: kept intentionally minimal after flaky experiments.
+ * OpenStreetMap view.
+ * Two input modes:
+ *  - rows:      availability snapshot (browse) -> strong/weak pins
+ *  - points:    search results -> confirmed/uncertain/out/unknown pins
+ * Camera locked to the selected province region; municipality focus frames it.
  */
 
 type Props = {
-  rows: HomeRow[];
+  rows?: HomeRowLike[];
+  points?: MapPoint[];
   focusMunicipio?: string | null;
   focusProvincia?: string | null;
 };
 
-type Ring = [number, number][];
+export type HomeRowLike = {
+  store_id: string;
+  store_name: string;
+  barrio: string;
+  product_slug: string;
+  product_name: string;
+  emoji: string;
+  availability: "available" | "out_of_stock";
+  price_from: number | null;
+  reporter_count: number;
+  last_seen_at: string;
+  queue_level?: number | null;
+  lat: number | null;
+  lng: number | null;
+};
 
-const EPS = 1e-9;
+export type MapPoint = {
+  store_id: string;
+  lat: number;
+  lng: number;
+  slug: string;
+  product_name: string;
+  store_name: string;
+  barrio: string;
+  status: "confirmed" | "uncertain" | "out" | "unknown";
+  price_from: number | null;
+  reporter_count: number;
+  last_seen_at: string | null;
+};
 
-function samePt(a: [number, number], b: [number, number]): boolean {
-  return Math.abs(a[0] - b[0]) < EPS && Math.abs(a[1] - b[1]) < EPS;
-}
+const STATUS_CLASS: Record<MapPoint["status"], string> = {
+  confirmed: "map-pin--confirmed",
+  uncertain: "map-pin--uncertain",
+  out: "map-pin--out",
+  unknown: "map-pin--unknown",
+};
 
-/** Join Overpass way segments endpoint-to-endpoint into closed rings. */
-function assembleClosedRings(segments: Ring[]): Ring[] {
-  const pool: Ring[] = segments.filter((s) => s.length > 1).map((s) => [...s]);
-  const rings: Ring[] = [];
+const STATUS_BADGE: Record<MapPoint["status"], string> = {
+  confirmed: "Hay · confirmado",
+  uncertain: "Había · sin confirmar",
+  out: "Reportado agotado",
+  unknown: "Sin reportes recientes",
+};
 
-  while (pool.length > 0) {
-    let chain = pool.shift()!;
-
-    for (;;) {
-      if (samePt(chain[0], chain[chain.length - 1])) break;
-
-      const end = chain[chain.length - 1];
-      const iFwd = pool.findIndex((s) => samePt(s[0], end));
-      const iRev = pool.findIndex((s) => samePt(s[s.length - 1], end));
-      if (iFwd === -1 && iRev === -1) break;
-
-      const idx = iFwd >= 0 ? iFwd : iRev;
-      let seg = pool.splice(idx, 1)[0];
-      if (iFwd === -1) seg = [...seg].reverse();
-      chain = chain.concat(seg.slice(1));
-    }
-
-    if (chain.length > 3 && samePt(chain[0], chain[chain.length - 1])) {
-      rings.push(chain);
-    }
-  }
-
-  return rings;
-}
-
-/**
- * Fetch a real OSM administrative polygon. Admin levels in Cuba:
- *   4 = province · 6 = municipality (Havana's municipios) · 8 = city seats.
- */
-async function loadAdminBoundary(
-  name: string,
-  adminLevel: string,
-  provincia: string | null,
-): Promise<Ring[] | null> {
-  const b = regionFor(provincia).bounds;
-  const bbox = `${b[0][0] - 1},${b[0][1] - 1},${b[1][0] + 1},${b[1][1] + 1}`;
-  const query = `[out:json][timeout:25];rel["boundary"="administrative"]["name"="${name}"]["admin_level"="${adminLevel}"](${bbox});out geom;`;
-  const url =
-    "https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query);
-
-  const res = await fetch(url, {
-    headers: { accept: "application/json", "user-agent": "DondeHay/0.1" },
-  });
-  if (!res.ok) return null;
-
-  const json = await res.json();
-  type OverpassRel = {
-    type: string;
-    tags?: { name?: string };
-    members?: { role?: string; geometry?: { lat: number; lon: number }[] }[];
-  };
-  const elements = json.elements as OverpassRel[];
-  const rel =
-    elements.find((e) => e.type === "relation" && e.tags?.name === name) ??
-    elements.find((e) => e.type === "relation");
-  if (!rel?.members) return null;
-
-  // Boundary ways are open segments; assemble them into closed rings.
-  const segments: Ring[] = rel.members
-    .filter((m) => m.geometry && m.role !== "inner")
-    .map((m) => m.geometry!.map((g) => [g.lat, g.lon] as [number, number]));
-
-  const rings = assembleClosedRings(segments);
-  return rings.length > 0 ? rings : null;
-}
-
-/** Approximate radius for the fallback delimitation circle (meters). */
-function municipioRadius(provincia?: string | null): number {
-  return provincia && provincia !== "La Habana" ? 9_000 : 2_600;
-}
-
-function circlePoints(lat: number, lng: number, radiusM: number): Ring {
-  const pts: Ring = [];
-  const latDeg = radiusM / 111_320;
-  const lngDeg = radiusM / (111_320 * Math.cos((lat * Math.PI) / 180));
-  for (let i = 0; i <= 40; i++) {
-    const t = (i / 40) * Math.PI * 2;
-    pts.push([lat + Math.sin(t) * latDeg, lng + Math.cos(t) * lngDeg]);
-  }
-  return pts;
-}
+type InternalPoint = {
+  key: string;
+  lat: number;
+  lng: number;
+  cls: string;
+  glyphSlug: string;
+  productName: string;
+  storeName: string;
+  barrio: string;
+  priceFrom: number | null;
+  reporterCount: number;
+  lastSeenAt: string | null;
+  badge: string;
+};
 
 const glyphCache = new Map<string, string>();
 
-/** In-memory boundary cache: switching municipios never refetches. */
-const boundaryCache = new Map<string, Ring[]>();
-
-/** Render a Phosphor icon to an SVG string once per product. */
 function productGlyph(slug: string): string {
   let html = glyphCache.get(slug);
   if (html === undefined) {
@@ -134,11 +94,15 @@ function productGlyph(slug: string): string {
   return html;
 }
 
-export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }: Props) {
+export default function AvailabilityMap({
+  rows,
+  points,
+  focusMunicipio,
+  focusProvincia,
+}: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const frameRef = useRef<(() => void) | null>(null);
-  const boundaryRingsRef = useRef<Ring[] | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
   useEffect(() => {
@@ -156,8 +120,8 @@ export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }
           zoom: mc ? 14 : region.minZoom + 1,
           minZoom: region.minZoom,
           maxZoom: 17,
-          zoomControl: false, // gestures/wheel suffice; recenter stays
-          attributionControl: false, // credit rendered in our own legend bar
+          zoomControl: false,
+          attributionControl: false,
           maxBounds: L.latLngBounds(region.bounds).pad(0.08),
           maxBoundsViscosity: 0.9,
         });
@@ -175,7 +139,6 @@ export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }
     return () => {
       cancelled = true;
       frameRef.current = null;
-      boundaryRingsRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -190,184 +153,95 @@ export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }
 
     async function paint() {
       const L = (await import("leaflet")).default;
-      const region = regionFor(focusProvincia);
       if (cancelled || !map) return;
 
       map.eachLayer((layer) => {
-        if ("_url" in layer) return; // keep tiles
+        if ("_url" in layer) return;
         map.removeLayer(layer);
       });
 
-      // Only mappable stock points; out-of-stock claims stay list-only.
-      const stockPoints = rows.filter(
-        (r) => r.lat !== null && r.lng !== null && r.availability === "available",
-      );
+      let internal: InternalPoint[] = [];
 
-      // --- Boundary of selected city/municipality --------------------------
-      // LOW priority on load: markers paint immediately; boundaries arrive
-      // when Overpass answers (memory cache + Service Worker cache).
-      const mc = focusMunicipio ? MUNICIPIO_CENTERS[focusMunicipio] : undefined;
-
-      const drawBoundary = (rings: Ring[]) => {
-        if (cancelled || !mapRef.current) return;
-        const mapNow = mapRef.current;
-        const outer: [number, number][] = [
-          [region.bounds[1][0] + 1, region.bounds[0][1] - 1],
-          [region.bounds[1][0] + 1, region.bounds[1][1] + 1],
-          [region.bounds[0][0] - 1, region.bounds[1][1] + 1],
-          [region.bounds[0][0] - 1, region.bounds[0][1] - 1],
-        ];
-        L.polygon([outer, ...rings], {
-          stroke: false,
-          fillColor: "#1b1813",
-          fillOpacity: 0.16,
-          interactive: false,
-        }).addTo(mapNow);
-        for (const ring of rings) {
-          L.polygon(ring, {
-            color: "#c2410c",
-            weight: 2,
-            dashArray: "6 6",
-            fill: false,
-            interactive: false,
-          }).addTo(mapNow);
-        }
-        frameRef.current?.(); // re-frame once the real shape is known
-      };
-
-      if (mc && focusMunicipio) {
-        const levels = focusProvincia === "La Habana" ? ["6"] : ["8", "6"];
-        const cacheKey = `${focusMunicipio}|${levels.join(",")}|${focusProvincia ?? ""}`;
-        const cached = boundaryCache.get(cacheKey);
-        if (cached) {
-          boundaryRingsRef.current = cached;
-          drawBoundary(cached);
-        } else {
-          void (async () => {
-            let fetched: Ring[] | null = null;
-            for (const level of levels) {
-              try {
-                fetched = await loadAdminBoundary(
-                  focusMunicipio!,
-                  level,
-                  focusProvincia ?? null,
-                );
-              } catch {
-                fetched = null;
-              }
-              if (fetched || cancelled) break;
-            }
-            if (!fetched && !cancelled && mc) {
-              fetched = [circlePoints(mc.lat, mc.lng, municipioRadius(focusProvincia))];
-            }
-            if (!fetched || cancelled) return;
-            boundaryCache.set(cacheKey, fetched);
-            boundaryRingsRef.current = fetched;
-            drawBoundary(fetched);
-          })();
-        }
-      } else if (!focusMunicipio && focusProvincia === "La Habana") {
-        // Whole-city view: La Habana's own silhouette (admin_level=4).
-        // Also low priority: fetched in the background, drawn on arrival.
-        const cacheKey = "silueta-habana|4";
-        const cached = boundaryCache.get(cacheKey);
-        if (cached) {
-          boundaryRingsRef.current = cached;
-          for (const ring of cached) {
-            L.polygon(ring, {
-              color: "#c2410c",
-              weight: 3,
-              dashArray: "8 6",
-              fill: false,
-              interactive: false,
-            }).addTo(map);
-          }
-          frameRef.current?.();
-        } else {
-          void (async () => {
-            try {
-              const rings = await loadAdminBoundary("La Habana", "4", focusProvincia);
-              if (!rings || cancelled) return;
-              boundaryCache.set(cacheKey, rings);
-              boundaryRingsRef.current = rings;
-              if (!mapRef.current) return;
-              for (const ring of rings) {
-                L.polygon(ring, {
-                  color: "#c2410c",
-                  weight: 3,
-                  dashArray: "8 6",
-                  fill: false,
-                  interactive: false,
-                }).addTo(mapRef.current);
-              }
-              frameRef.current?.();
-            } catch {
-              /* silhouette is progressive enhancement */
-            }
-          })();
+      if (points) {
+        internal = points.map((p) => ({
+          key: p.store_id + p.slug + p.status,
+          lat: p.lat,
+          lng: p.lng,
+          cls: STATUS_CLASS[p.status],
+          glyphSlug: p.slug,
+          productName: p.product_name,
+          storeName: p.store_name,
+          barrio: p.barrio,
+          priceFrom: p.price_from,
+          reporterCount: p.reporter_count,
+          lastSeenAt: p.last_seen_at,
+          badge: STATUS_BADGE[p.status],
+        }));
+      } else {
+        const browseRows = rows ?? [];
+        for (const r of browseRows) {
+          if (r.lat === null || r.lng === null || r.availability !== "available") continue;
+          const ageMin = (Date.now() - new Date(r.last_seen_at).getTime()) / 60_000;
+          const strong = r.reporter_count >= 2 || ageMin <= 30;
+          internal.push({
+            key: r.store_id + r.product_slug,
+            lat: Number(r.lat),
+            lng: Number(r.lng),
+            cls: strong ? "map-pin--confirmed" : "map-pin--uncertain",
+            glyphSlug: r.product_slug,
+            productName: r.product_name,
+            storeName: r.store_name,
+            barrio: r.barrio,
+            priceFrom: r.price_from,
+            reporterCount: r.reporter_count,
+            lastSeenAt: r.last_seen_at,
+            badge: strong ? "Confirmado" : "Fresco",
+          });
         }
       }
 
-      for (const p of stockPoints) {
-        const ageMin = (Date.now() - new Date(p.last_seen_at).getTime()) / 60_000;
-        const strong = p.reporter_count >= 2 || ageMin <= 30;
-
+      for (const p of internal) {
         const icon = L.divIcon({
           className: "",
-          html: `<div class="map-pin ${strong ? "map-pin--strong" : "map-pin--weak"}">${productGlyph(
-            p.product_slug,
-          )}</div>`,
+          html: `<div class="map-pin ${p.cls}" title="${p.badge}">${productGlyph(p.glyphSlug)}</div>`,
           iconSize: [32, 32],
           iconAnchor: [16, 16],
           popupAnchor: [0, -14],
         });
 
         const price =
-          p.price_from !== null
-            ? `<div class="popup-price">$${p.price_from}</div>`
+          p.priceFrom !== null && p.priceFrom !== undefined
+            ? `<div class="popup-price">$${p.priceFrom}</div>`
             : "";
-        const badge = strong ? "Confirmado" : "Fresco";
+        const meta =
+          p.lastSeenAt != null
+            ? `${timeAgo(p.lastSeenAt)}${p.reporterCount > 1 ? ` · ${p.reporterCount} reportes` : ""}`
+            : "sin reportes recientes";
         const html = `
           <div class="popup-ticket">
-            <div class="popup-name"><span>${p.product_name}</span><span class="stamp stamp-hay" style="transform:none;font-size:10px;padding:0 4px;">${badge}</span></div>
+            <div class="popup-name"><span>${p.productName}</span><span class="stamp stamp-hay" style="transform:none;font-size:10px;padding:0 4px;">${p.badge}</span></div>
             ${price}
-            <div class="popup-meta">${p.store_name}<br/>${p.barrio} · ${timeAgo(
-              p.last_seen_at,
-            )}${p.reporter_count > 1 ? ` · ${p.reporter_count} reportes` : ""}</div>
+            <div class="popup-meta">${p.storeName}<br/>${p.barrio} · ${meta}</div>
           </div>`;
 
-        L.marker([Number(p.lat), Number(p.lng)], { icon })
+        L.marker([p.lat, p.lng], { icon })
           .bindPopup(html)
           .addTo(map);
       }
 
-      // --- Framing (also used by the recenter button) ----------------------
-      // Priority: the real boundary polygon when known (nothing gets cut),
-      // then stock points, then region default.
+      // --- Framing ---------------------------------------------------------
       const frame = () => {
         const mc = focusMunicipio ? MUNICIPIO_CENTERS[focusMunicipio] : undefined;
-        if (mc && boundaryRingsRef.current) {
-          const b = L.latLngBounds([]);
-          for (const ring of boundaryRingsRef.current) {
-            for (const pt of ring) b.extend(pt);
-          }
-          map.fitBounds(b.pad(0.12), { maxZoom: 16 });
+        if (mc && !points) {
+          map.setView([mc.lat, mc.lng], 14);
           return;
         }
-        if (mc) {
-          if (stockPoints.length > 0) {
-            const b = L.latLngBounds([]);
-            for (const p of stockPoints) b.extend([Number(p.lat), Number(p.lng)]);
-            b.extend([mc.lat, mc.lng]);
-            map.fitBounds(b.pad(0.25), { maxZoom: 15 });
-          } else {
-            map.setView([mc.lat, mc.lng], 14);
-          }
-        } else if (stockPoints.length > 1) {
+        if (internal.length > 0) {
           const b = L.latLngBounds([]);
-          for (const p of stockPoints) b.extend([Number(p.lat), Number(p.lng)]);
-          map.fitBounds(b.pad(0.25), { maxZoom: 14 });
+          for (const p of internal) b.extend([p.lat, p.lng]);
+          map.fitBounds(b.pad(0.25), { maxZoom: 16 });
         } else {
+          const region = regionFor(focusProvincia);
           map.setView(region.center, region.minZoom + 2);
         }
       };
@@ -379,7 +253,7 @@ export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }
     return () => {
       cancelled = true;
     };
-  }, [rows, status, focusMunicipio, focusProvincia]);
+  }, [rows, points, status, focusMunicipio, focusProvincia]);
 
   return (
     <div className="card-ticket overflow-hidden">
@@ -393,8 +267,8 @@ export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }
         <button
           type="button"
           onClick={() => frameRef.current?.()}
-          aria-label="Centrar en mi zona"
-          title="Centrar en mi zona"
+          aria-label="Centrar en los resultados"
+          title="Centrar en los resultados"
           className="btn btn-ghost absolute right-3 top-3 z-[500] h-10 w-10 justify-center rounded-md !p-0"
         >
           <Crosshair size={20} weight="bold" aria-hidden />
@@ -404,25 +278,31 @@ export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }
       {/* Legend doubles as required attribution for OSM tiles */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t-2 border-dashed border-line px-3 py-2 text-xs text-ink-soft">
         <span className="flex items-center gap-1.5">
-          <span
-            aria-hidden
-            className="map-pin map-pin--strong"
-            style={{ width: 18, height: 18, fontSize: 10 }}
-          >
+          <span aria-hidden className={`map-pin map-pin--confirmed`} style={{ width: 18, height: 18, fontSize: 10 }}>
             ✚
           </span>
-          Confirmado (2+ personas o &lt;30 min)
+          Hay · confirmado
         </span>
         <span className="flex items-center gap-1.5">
-          <span
-            aria-hidden
-            className="map-pin map-pin--weak"
-            style={{ width: 18, height: 18, fontSize: 10 }}
-          >
+          <span aria-hidden className={`map-pin map-pin--uncertain`} style={{ width: 18, height: 18, fontSize: 10 }}>
             ?
           </span>
-          Reporte único
+          Había · sin confirmar
         </span>
+        {points && (
+          <>
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden className="map-pin map-pin--out" style={{ width: 18, height: 18, fontSize: 10 }}>
+                ✕
+              </span>
+              Agotado
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden className="map-pin map-pin--unknown" style={{ width: 18, height: 18, fontSize: 10 }} />
+              Sin datos
+            </span>
+          </>
+        )}
         <span className="ml-auto">© OpenStreetMap contributors</span>
       </div>
     </div>

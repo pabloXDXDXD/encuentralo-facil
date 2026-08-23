@@ -198,6 +198,25 @@ a:focus-visible {
   background: #fdf3d7; /* single unconfirmed report */
 }
 
+/* Search-result states */
+.map-pin--confirmed {
+  background: var(--hay-bg);
+}
+
+.map-pin--uncertain {
+  background: #fdf3d7;
+}
+
+.map-pin--out {
+  background: #e3ded4; /* reported agotado -> muted gray */
+}
+
+.map-pin--unknown {
+  background: transparent;
+  border-style: dashed;
+  opacity: 0.7; /* no fresh data either way */
+}
+
 /* Leaflet popup restyled as a market ticket */
 .leaflet-popup-content-wrapper {
   border: 2px solid var(--ink);

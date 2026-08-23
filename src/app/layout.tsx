@@ -46,12 +46,6 @@ export default function RootLayout({
               <Link href="/como-funciona" className="text-paper/70 underline-offset-4 hover:text-paper hover:underline">
                 Cómo funciona
               </Link>
-              <Link
-                href="/reportar"
-                className="btn btn-primary rounded-md px-3 py-1.5 text-sm"
-              >
-                + Reportar
-              </Link>
             </nav>
           </div>
         </header>

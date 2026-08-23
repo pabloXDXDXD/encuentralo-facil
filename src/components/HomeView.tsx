@@ -1,23 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   Basket,
   CaretDown,
+  Crosshair,
+  Funnel,
   GlobeHemisphereWest,
   ListBullets,
+  MagnifyingGlass,
   MapTrifold,
+  PlusCircle,
   SlidersHorizontal,
   Star,
 } from "@phosphor-icons/react";
 import VoteButtons from "@/components/VoteButtons";
+import AvailabilityMap, { type MapPoint } from "@/components/AvailabilityMap";
 import { ProductIcon } from "@/lib/product-icons";
+import { MUNICIPIO_CENTERS } from "@/lib/geo";
 import { formatPrice, queueLabel, timeAgo } from "@/lib/format";
 
-const AvailabilityMap = dynamic(() => import("@/components/AvailabilityMap"), {
+const SAVED_KEY = "dh_saved_products";
+
+const AvailabilityMapDynamic = dynamic(() => import("@/components/AvailabilityMap"), {
   ssr: false,
   loading: () => (
     <div className="card-ticket h-[60dvh] animate-pulse p-4 text-center text-sm text-ink-soft">
@@ -25,8 +33,6 @@ const AvailabilityMap = dynamic(() => import("@/components/AvailabilityMap"), {
     </div>
   ),
 });
-
-const SAVED_KEY = "dh_saved_products";
 
 export type HomeRow = {
   store_id: string;
@@ -43,6 +49,21 @@ export type HomeRow = {
   queue_level: number | null;
   lat: number | null;
   lng: number | null;
+};
+
+type SearchRow = {
+  store_id: string;
+  store_name: string;
+  barrio: string;
+  product_slug: string;
+  product_name: string;
+  lat: number;
+  lng: number;
+  distance_m: number;
+  status: "confirmed" | "uncertain" | "out" | "unknown";
+  price_from: number | null;
+  reporter_count: number;
+  last_seen_at: string | null;
 };
 
 type Props = {
@@ -79,6 +100,17 @@ function locationHref(provincia: string | null, municipio: string | null): strin
   return qs ? `/?${qs}` : "/";
 }
 
+const RADIUS_OPTIONS = [
+  { value: 1500, label: "≤1.5 km" },
+  { value: 3000, label: "≤3 km" },
+  { value: 6000, label: "≤6 km" },
+  { value: 20000, label: "Toda la zona" },
+];
+
+function fmtDist(m: number): string {
+  return m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`;
+}
+
 export default function HomeView({
   rows,
   provinces,
@@ -96,25 +128,35 @@ export default function HomeView({
   const [showLocation, setShowLocation] = useState(false);
   const [showViewPanel, setShowViewPanel] = useState(false);
 
+  // --- Search state ---------------------------------------------------------
+  const [qInput, setQInput] = useState("");
+  const [activeQuery, setActiveQuery] = useState("");
+  const [results, setResults] = useState<SearchRow[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [anchor, setAnchor] = useState<{ lat: number; lng: number } | null>(null);
+  const [gpsBusy, setGpsBusy] = useState(false);
+  const [radius, setRadius] = useState(6000);
+  const [confirmedOnly, setConfirmedOnly] = useState(false);
+  const [maxPriceInput, setMaxPriceInput] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     setSaved(readSaved());
     setLoaded(true);
-    // View preference survives navigation and sessions.
     try {
       const pref = localStorage.getItem("dh_pref_view");
       if (pref === "map" || pref === "list") setView(pref);
+      const savedAnchor = localStorage.getItem("dh_home_anchor");
+      if (savedAnchor) setAnchor(JSON.parse(savedAnchor));
     } catch {
       /* ignore */
     }
-    // Returning users land where they last browsed (URL without location).
     if (!activeProvincia && !activeMunicipio) {
       try {
         const last = JSON.parse(
           localStorage.getItem("dh_last_location") ?? "null",
         ) as { p: string | null; m: string | null } | null;
-        if (last && (last.p || last.m)) {
-          router.replace(locationHref(last.p, last.m));
-        }
+        if (last && (last.p || last.m)) router.replace(locationHref(last.p, last.m));
       } catch {
         /* ignore */
       }
@@ -141,7 +183,6 @@ export default function HomeView({
   }, [activeProvincia, activeMunicipio]);
 
   // Parent refetches rows after a location change — adopt them wholesale.
-  // (This replaced the key-remount so view/filter prefs survive navigation.)
   useEffect(() => {
     setRowsState(rows);
   }, [rows]);
@@ -152,61 +193,145 @@ export default function HomeView({
     writeSaved(next);
   }
 
-  const filtering = filterOn && saved.length > 0;
-  const visibleRows = filtering
-    ? rowsState.filter((r) => saved.includes(r.product_slug))
-    : rowsState;
-
-  // Freshness loop: poll the snapshot every 60s while the tab is visible.
-  useEffect(() => {
-    let alive = true;
-    async function poll() {
-      if (document.hidden) return;
-      try {
-        const qs = new URLSearchParams();
-        if (activeProvincia) qs.set("provincia", activeProvincia);
-        if (activeMunicipio) qs.set("municipio", activeMunicipio);
-        const res = await fetch(`/api/availability?${qs}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!alive || !data.ok) return;
-        setRowsState(
-          (data.rows as HomeRow[]).map((r) => ({
-            ...r,
-            last_seen_at: new Date(r.last_seen_at).toISOString(),
-          })),
-        );
-      } catch {
-        /* offline -> keep showing what we have */
-      }
-    }
-    const timer = setInterval(poll, 60_000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, [activeProvincia, activeMunicipio]);
-
   function changeLocation(nextProvincia: string | null, nextMunicipio: string | null) {
     router.push(locationHref(nextProvincia, nextMunicipio));
   }
 
+  /** Resolve the search anchor: saved GPS/pick > municipality centroid > region. */
+  function resolveAnchor(): { lat: number; lng: number } {
+    if (anchor) return anchor;
+    const mc = activeMunicipio ? MUNICIPIO_CENTERS[activeMunicipio] : undefined;
+    if (mc) {
+      const a = { lat: mc.lat, lng: mc.lng };
+      setAnchor(a);
+      return a;
+    }
+    return { lat: 23.12, lng: -82.38 }; // Havana center
+  }
+
+  function useGps() {
+    if (!navigator.geolocation) return;
+    setGpsBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const a = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setAnchor(a);
+        try {
+          localStorage.setItem("dh_home_anchor", JSON.stringify(a));
+        } catch {}
+        setGpsBusy(false);
+      },
+      () => setGpsBusy(false),
+      { timeout: 8000 },
+    );
+  }
+
+  const runSearch = useCallback(
+    async (query: string) => {
+      const a = resolveAnchor();
+      const params = new URLSearchParams({
+        q: query,
+        lat: String(a.lat),
+        lng: String(a.lng),
+        radius: String(radius),
+      });
+      if (confirmedOnly) params.set("confirmedOnly", "1");
+      const mp = Number(maxPriceInput);
+      if (Number.isFinite(mp) && mp > 0) params.set("maxPrice", String(Math.round(mp)));
+      setSearching(true);
+      try {
+        const res = await fetch(`/api/search?${params}`);
+        const data = await res.json();
+        setResults(data.ok ? (data.rows as SearchRow[]) : []);
+      } catch {
+        setResults([]);
+      } finally {
+        setSearching(false);
+      }
+    },
+    [anchor, radius, confirmedOnly, maxPriceInput, activeMunicipio],
+  );
+
+  function onSearchInput(value: string) {
+    setQInput(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      const q = value.trim();
+      setActiveQuery(q);
+      if (q.length >= 2) void runSearch(q);
+      else setResults(null);
+    }, 450);
+  }
+
+  function clearSearch() {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setQInput("");
+    setActiveQuery("");
+    setResults(null);
+  }
+
+  const filtering = filterOn && saved.length > 0;
+
+  // Browse-mode rows (no active query)
+  const browseVisible = useMemo(
+    () =>
+      filtering ? rowsState.filter((r) => saved.includes(r.product_slug)) : rowsState,
+    [rowsState, filtering, saved],
+  );
+
   const byZone = useMemo(() => {
     const map = new Map<string, HomeRow[]>();
-    for (const row of visibleRows) {
+    for (const row of browseVisible) {
       const list = map.get(row.barrio) ?? [];
       list.push(row);
       map.set(row.barrio, list);
     }
     return map;
-  }, [visibleRows]);
+  }, [browseVisible]);
 
-  const selectClass =
-    "w-full appearance-none rounded-md border-2 border-ink bg-card px-3 py-2 pr-8 text-sm font-semibold";
+  const searchMode = activeQuery.length >= 2;
+
+  // --- Derived map inputs ----------------------------------------------------
+  const searchPoints: MapPoint[] = useMemo(() => {
+    if (!results) return [];
+    return results.map((r) => ({
+      store_id: r.store_id,
+      lat: r.lat,
+      lng: r.lng,
+      slug: r.product_slug,
+      product_name: r.product_name,
+      store_name: r.store_name,
+      barrio: r.barrio,
+      status: r.status,
+      price_from: r.price_from,
+      reporter_count: r.reporter_count,
+      last_seen_at: r.last_seen_at,
+    }));
+  }, [results]);
 
   return (
     <div className="space-y-4">
-      {/* Compact control bar: icon-only toggles */}
+      {/* --- Sticky search bar --------------------------------------------- */}
+      <div className="sticky top-[52px] z-30 -mx-4 px-4 pb-1 pt-1">
+        <div className="card-ticket flex items-center gap-2 px-3 py-2">
+          <MagnifyingGlass size={18} className="shrink-0 text-ink-soft" aria-hidden />
+          <input
+            value={qInput}
+            onChange={(e) => onSearchInput(e.target.value)}
+            placeholder="Buscar producto… (ej. pollo)"
+            className="w-full bg-transparent text-sm outline-none"
+            inputMode="search"
+            aria-label="Buscar producto"
+          />
+          {qInput && (
+            <button type="button" onClick={clearSearch} aria-label="Limpiar búsqueda" className="text-ink-soft">
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* --- Compact control bar ------------------------------------------- */}
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -244,7 +369,15 @@ export default function HomeView({
       </div>
 
       {showLocation && (
-        <div className="card-flat space-y-2 p-3">
+        <div className="card-flat space-y-3 p-3">
+          <button
+            type="button"
+            onClick={useGps}
+            disabled={gpsBusy}
+            className="btn btn-ghost w-full justify-center gap-2 rounded-md py-2 text-sm font-semibold"
+          >
+            <Crosshair size={16} aria-hidden /> {gpsBusy ? "Localizando…" : "Usar mi GPS"}
+          </button>
           <label className="relative block">
             <span className="px-1 text-xs text-ink-soft">Provincia</span>
             <select
@@ -327,11 +460,115 @@ export default function HomeView({
         </div>
       )}
 
-      {view === "map" && (
-        <AvailabilityMap rows={visibleRows} focusMunicipio={activeMunicipio} focusProvincia={activeProvincia} />
+      {/* --- Filters (search mode only) ------------------------------------- */}
+      {searchMode && (
+        <div className="flex flex-wrap items-center gap-2">
+          {RADIUS_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setRadius(opt.value)}
+              aria-pressed={radius === opt.value}
+              className={`btn shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
+                radius === opt.value ? "bg-ink text-paper" : "btn-ghost"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setConfirmedOnly((v) => !v)}
+            aria-pressed={confirmedOnly}
+            className={`btn shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
+              confirmedOnly ? "bg-accent text-on-accent" : "btn-ghost"
+            }`}
+          >
+            ✅ Solo confirmados
+          </button>
+          <input
+            value={maxPriceInput}
+            onChange={(e) => setMaxPriceInput(e.target.value.replace(/[^0-9]/g, ""))}
+            onBlur={() => void runSearch(activeQuery)}
+            onKeyDown={(e) => e.key === "Enter" && void runSearch(activeQuery)}
+            placeholder="Máx $"
+            inputMode="numeric"
+            aria-label="Precio máximo"
+            className="w-20 shrink-0 rounded-full border-2 border-ink bg-card px-3 py-1 text-xs"
+          />
+        </div>
       )}
 
-      {view === "list" && (
+      {offline && (
+        <div className="card-flat p-4 text-sm">
+          <p className="font-display">Sin conexión</p>
+          <p className="mt-1 text-ink-soft">No llega el servidor. Intenta en unos minutos.</p>
+        </div>
+      )}
+
+      {/* --- SEARCH RESULTS -------------------------------------------------- */}
+      {searchMode &&
+        (view === "map" ? (
+          <AvailabilityMapDynamic points={searchPoints} focusProvincia={activeProvincia} />
+        ) : (
+          <section className="space-y-2">
+            {searching && (
+              <p className="px-1 text-xs text-ink-soft">Buscando «{activeQuery}»…</p>
+            )}
+            {!searching && results?.length === 0 && (
+              <div className="card-ticket p-6 text-center text-sm text-ink-soft">
+                Nada encontrado para «{activeQuery}» en este radio.
+              </div>
+            )}
+            {results?.map((r, i) => (
+              <article
+                key={r.store_id}
+                className="card-ticket rise flex items-center gap-3 p-3"
+                style={{ "--i": i } as React.CSSProperties}
+              >
+                <span className="w-14 shrink-0 text-center text-xs font-bold text-ink-soft">
+                  {fmtDist(r.distance_m)}
+                </span>
+                {r.product_slug && (
+                  <ProductIcon slug={r.product_slug} size={26} className="shrink-0 text-ink" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold">{r.product_name}</p>
+                  <p className="truncate text-xs text-ink-soft">{r.store_name}</p>
+                </div>
+                {r.status !== "unknown" && r.price_from !== null && (
+                  <span className="font-display text-xl text-hay-ink">
+                    {formatPrice(r.price_from)}
+                  </span>
+                )}
+                <span
+                  className={`stamp text-xs ${
+                    r.status === "confirmed"
+                      ? "stamp-hay -rotate-2"
+                      : r.status === "uncertain"
+                        ? "stamp-hay rotate-1 opacity-80"
+                        : "stamp-nohay rotate-2"
+                  }`}
+                >
+                  {r.status === "confirmed"
+                    ? "Hay"
+                    : r.status === "uncertain"
+                      ? "Quizás"
+                      : r.status === "out"
+                        ? "No hay"
+                        : "?"}
+                </span>
+              </article>
+            ))}
+          </section>
+        ))}
+
+      {/* --- BROWSE MODE (sin búsqueda) -------------------------------------- */}
+      {!searchMode && view === "map" && (
+        <AvailabilityMapDynamic rows={browseVisible} focusMunicipio={activeMunicipio} focusProvincia={activeProvincia} />
+      )}
+
+      {!searchMode && view === "list" && (
         <>
           <button
             type="button"
@@ -347,58 +584,56 @@ export default function HomeView({
             </span>
           </button>
 
-          {offline && (
-            <div className="card-flat p-4 text-sm">
-              <p className="font-display">Sin conexión</p>
-              <p className="mt-1 text-ink-soft">
-                No llega el servidor. Intenta de nuevo en unos minutos.
-              </p>
-            </div>
-          )}
-
-          {!offline && visibleRows.length === 0 && (
+          {!offline && browseVisible.length === 0 && (
             <div className="card-ticket p-6 text-center" style={{ "--i": 0 } as React.CSSProperties}>
               <Basket aria-hidden size={44} className="mx-auto text-ink-soft" weight="duotone" />
               <p className="mt-2 font-display text-xl">
-                {filtering && saved.length === 0
-                  ? "Sin búsquedas guardadas"
-                  : "Nada reportado aquí aún"}
+                {filtering && saved.length === 0 ? "Sin búsquedas guardadas" : "Nada reportado aquí aún"}
               </p>
               <p className="mx-auto mt-1 max-w-xs text-sm text-ink-soft">
                 {filtering && saved.length === 0
                   ? "Toca la estrella de un producto para seguirlo."
                   : "Los reportes duran 6 horas visibles. Sé quien encienda la zona."}
               </p>
-              <Link href="/reportar" className="btn btn-primary mt-4 rounded-md px-4 py-2 text-sm">
-                Hacer un reporte
-              </Link>
             </div>
           )}
+
+          {[...byZone.entries()].map(([zone, zoneRows]) => (
+            <section key={zone} className="space-y-3">
+              <h2 className="flex items-center gap-3">
+                <span className="font-display text-lg leading-none">{zone}</span>
+                <span aria-hidden className="h-0.5 flex-1 bg-line" />
+                <span className="text-xs font-bold text-ink-soft">{zoneRows.length}</span>
+              </h2>
+              {zoneRows.map((row, i) => (
+                <TicketRow
+                  key={row.store_id + row.product_slug}
+                  row={row}
+                  index={i}
+                  saved={saved}
+                  onToggleSave={toggleSave}
+                />
+              ))}
+            </section>
+          ))}
         </>
       )}
 
-      {view === "list" &&
-        [...byZone.entries()].map(([zone, zoneRows]) => (
-          <section key={zone} className="space-y-3">
-            <h2 className="flex items-center gap-3">
-              <span className="font-display text-lg leading-none">{zone}</span>
-              <span aria-hidden className="h-0.5 flex-1 bg-line" />
-              <span className="text-xs font-bold text-ink-soft">{zoneRows.length}</span>
-            </h2>
-            {zoneRows.map((row, i) => (
-              <TicketRow
-                key={row.store_id + row.product_slug}
-                row={row}
-                index={i}
-                saved={saved}
-                onToggleSave={toggleSave}
-              />
-            ))}
-          </section>
-        ))}
+      {/* --- FAB Reportar ---------------------------------------------------- */}
+      <Link
+        href="/reportar"
+        aria-label="Reportar producto"
+        title="Reportar producto"
+        className="btn btn-primary fixed bottom-20 right-4 z-40 h-14 w-14 justify-center rounded-full shadow-[4px_4px_0_0_var(--stamp)] !p-0"
+      >
+        <PlusCircle weight="fill" size={28} aria-hidden />
+      </Link>
     </div>
   );
 }
+
+const selectClass =
+  "w-full appearance-none rounded-md border-2 border-ink bg-card px-3 py-2 pr-8 text-sm font-semibold";
 
 type RowProps = {
   row: HomeRow;
@@ -452,13 +687,11 @@ function TicketRow({ row, index, saved, onToggleSave }: RowProps) {
         </div>
 
         <div className="flex shrink-0 flex-col items-end gap-1.5">
-          {available ? (
-            row.price_from !== null && (
-              <span className="font-display text-2xl leading-none text-hay-ink">
-                {formatPrice(row.price_from)}
-              </span>
-            )
-          ) : null}
+          {available && row.price_from !== null && (
+            <span className="font-display text-2xl leading-none text-hay-ink">
+              {formatPrice(row.price_from)}
+            </span>
+          )}
           <span
             className={`stamp text-sm ${available ? "stamp-hay -rotate-2" : "stamp-nohay rotate-2"}`}
           >
