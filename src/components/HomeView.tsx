@@ -1,10 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { Basket, CaretDown, MapPin, Star } from "@phosphor-icons/react";
+import {
+  Basket,
+  CaretDown,
+  GlobeHemisphereWest,
+  ListBullets,
+  MapTrifold,
+  SlidersHorizontal,
+  Star,
+} from "@phosphor-icons/react";
 import VoteButtons from "@/components/VoteButtons";
 import { ProductIcon } from "@/lib/product-icons";
 import { formatPrice, queueLabel, timeAgo } from "@/lib/format";
@@ -85,11 +93,58 @@ export default function HomeView({
   const [filterOn, setFilterOn] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState<"list" | "map">("list");
+  const [showLocation, setShowLocation] = useState(false);
+  const [showViewPanel, setShowViewPanel] = useState(false);
 
   useEffect(() => {
     setSaved(readSaved());
     setLoaded(true);
-  }, []);
+    // View preference survives navigation and sessions.
+    try {
+      const pref = localStorage.getItem("dh_pref_view");
+      if (pref === "map" || pref === "list") setView(pref);
+    } catch {
+      /* ignore */
+    }
+    // Returning users land where they last browsed (URL without location).
+    if (!activeProvincia && !activeMunicipio) {
+      try {
+        const last = JSON.parse(
+          localStorage.getItem("dh_last_location") ?? "null",
+        ) as { p: string | null; m: string | null } | null;
+        if (last && (last.p || last.m)) {
+          router.replace(locationHref(last.p, last.m));
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("dh_pref_view", view);
+    } catch {
+      /* ignore */
+    }
+  }, [view]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "dh_last_location",
+        JSON.stringify({ p: activeProvincia, m: activeMunicipio }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [activeProvincia, activeMunicipio]);
+
+  // Parent refetches rows after a location change — adopt them wholesale.
+  // (This replaced the key-remount so view/filter prefs survive navigation.)
+  useEffect(() => {
+    setRowsState(rows);
+  }, [rows]);
 
   function toggleSave(slug: string) {
     const next = saved.includes(slug) ? saved.filter((s) => s !== slug) : [...saved, slug];
@@ -151,81 +206,126 @@ export default function HomeView({
 
   return (
     <div className="space-y-4">
-      {/* Cascading location selector */}
-      <div className="grid grid-cols-2 gap-2">
-        <label className="relative block">
-          <span className="sr-only">Provincia</span>
-          <select
-            value={activeProvincia ?? ""}
-            onChange={(e) =>
-              // switching province resets the municipality
-              changeLocation(e.target.value || null, null)
-            }
-            className={selectClass}
-          >
-            <option value="">Toda Cuba</option>
-            {provinces.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-          <CaretDown
-            aria-hidden
-            size={14}
-            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft"
-          />
-        </label>
-        <label className="relative block">
-          <span className="sr-only">Municipio</span>
-          <select
-            value={activeMunicipio ?? ""}
-            onChange={(e) => changeLocation(activeProvincia, e.target.value || null)}
-            className={selectClass}
-            disabled={municipios.length === 0 && !activeProvincia}
-          >
-            <option value="">
-              {activeProvincia ? "Todo el territorio" : "Elija provincia primero"}
-            </option>
-            {municipios.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <CaretDown
-            aria-hidden
-            size={14}
-            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft"
-          />
-        </label>
+      {/* Compact control bar: icon-only toggles */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setShowLocation((v) => !v);
+            setShowViewPanel(false);
+          }}
+          aria-expanded={showLocation}
+          aria-label="Cambiar ubicación"
+          title="Ubicación"
+          className={`btn h-10 w-10 justify-center rounded-md !p-0 ${
+            showLocation ? "bg-ink text-paper" : "btn-ghost"
+          }`}
+        >
+          <GlobeHemisphereWest size={20} aria-hidden />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setShowViewPanel((v) => !v);
+            setShowLocation(false);
+          }}
+          aria-expanded={showViewPanel}
+          aria-label="Opciones de vista"
+          title="Vista"
+          className={`btn h-10 w-10 justify-center rounded-md !p-0 ${
+            showViewPanel ? "bg-ink text-paper" : "btn-ghost"
+          }`}
+        >
+          <SlidersHorizontal size={20} aria-hidden />
+        </button>
+        <span className="ml-auto truncate text-xs font-semibold text-ink-soft">
+          {[activeProvincia, activeMunicipio].filter(Boolean).join(" · ") || "Toda Cuba"}
+        </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Vista">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view === "list"}
-          onClick={() => setView("list")}
-          className={`btn justify-center rounded-md py-2 text-sm font-bold ${
-            view === "list" ? "bg-ink text-paper" : "btn-ghost"
-          }`}
-        >
-          Lista
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view === "map"}
-          onClick={() => setView("map")}
-          className={`btn justify-center gap-2 rounded-md py-2 text-sm font-bold ${
-            view === "map" ? "bg-ink text-paper" : "btn-ghost"
-          }`}
-        >
-          <MapPin size={16} weight={view === "map" ? "fill" : "regular"} aria-hidden />
-          Mapa
-        </button>
-      </div>
+      {showLocation && (
+        <div className="card-flat space-y-2 p-3">
+          <label className="relative block">
+            <span className="px-1 text-xs text-ink-soft">Provincia</span>
+            <select
+              value={activeProvincia ?? ""}
+              onChange={(e) => {
+                changeLocation(e.target.value || null, null);
+                setShowLocation(false);
+              }}
+              className={`mt-1 ${selectClass}`}
+            >
+              <option value="">Toda Cuba</option>
+              {provinces.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            <CaretDown
+              aria-hidden
+              size={14}
+              className="pointer-events-none absolute bottom-3 right-3 text-ink-soft"
+            />
+          </label>
+          <label className="relative block">
+            <span className="px-1 text-xs text-ink-soft">
+              {activeProvincia && activeProvincia !== "La Habana" ? "Ciudad" : "Municipio"}
+            </span>
+            <select
+              value={activeMunicipio ?? ""}
+              onChange={(e) => {
+                changeLocation(activeProvincia, e.target.value || null);
+                setShowLocation(false);
+              }}
+              className={`mt-1 ${selectClass}`}
+              disabled={municipios.length === 0}
+            >
+              <option value="">Todo el territorio</option>
+              {municipios.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <CaretDown
+              aria-hidden
+              size={14}
+              className="pointer-events-none absolute bottom-3 right-3 text-ink-soft"
+            />
+          </label>
+        </div>
+      )}
+
+      {showViewPanel && (
+        <div className="card-flat space-y-2 p-3">
+          <span className="px-1 text-xs text-ink-soft">Tipo de vista</span>
+          <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Vista">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === "list"}
+              onClick={() => setView("list")}
+              className={`btn justify-center gap-2 rounded-md py-2 text-sm font-bold ${
+                view === "list" ? "bg-ink text-paper" : "btn-ghost"
+              }`}
+            >
+              <ListBullets size={16} aria-hidden /> Lista
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === "map"}
+              onClick={() => setView("map")}
+              className={`btn justify-center gap-2 rounded-md py-2 text-sm font-bold ${
+                view === "map" ? "bg-ink text-paper" : "btn-ghost"
+              }`}
+            >
+              <MapTrifold size={16} aria-hidden /> Mapa
+            </button>
+          </div>
+        </div>
+      )}
 
       {view === "map" && (
         <AvailabilityMap rows={visibleRows} focusMunicipio={activeMunicipio} focusProvincia={activeProvincia} />
