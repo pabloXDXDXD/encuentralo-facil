@@ -12,13 +12,10 @@ import type { HomeRow } from "@/components/HomeView";
 
 /**
  * OpenStreetMap view of availability points.
- * - Camera locked to the selected province region; municipality selection
- *   frames ONLY that municipality and dims the rest of the province.
- * - REAL municipality boundaries come from OSM itself via the Overpass API
- *   (admin_level=6 relations, same source as the base map's dashed lines).
- *   The Service Worker caches each response forever -> one data cost ever.
+ * - Camera locked to the selected province region.
  * - Marker confidence: solid green = confirmed (2+ reporters or <30 min old),
  *   cream = single report. Out-of-stock claims are list-only by design.
+ * - No boundary overlays: kept intentionally minimal after flaky experiments.
  */
 
 type Props = {
@@ -29,26 +26,54 @@ type Props = {
 
 type Ring = [number, number][];
 
-const glyphCache = new Map<string, string>();
+const EPS = 1e-9;
 
-/** Render a Phosphor icon to an SVG string once per product. */
-function productGlyph(slug: string): string {
-  let html = glyphCache.get(slug);
-  if (html === undefined) {
-    html = renderToStaticMarkup(<ProductIcon slug={slug} size={15} />);
-    glyphCache.set(slug, html);
-  }
-  return html;
+function samePt(a: [number, number], b: [number, number]): boolean {
+  return Math.abs(a[0] - b[0]) < EPS && Math.abs(a[1] - b[1]) < EPS;
 }
 
-/** Fetch the real OSM boundary polygon for a municipality (Overpass API). */
-async function loadMunicipioBoundary(
+/** Join Overpass way segments endpoint-to-endpoint into closed rings. */
+function assembleClosedRings(segments: Ring[]): Ring[] {
+  const pool: Ring[] = segments.filter((s) => s.length > 1).map((s) => [...s]);
+  const rings: Ring[] = [];
+
+  while (pool.length > 0) {
+    let chain = pool.shift()!;
+
+    for (;;) {
+      if (samePt(chain[0], chain[chain.length - 1])) break;
+
+      const end = chain[chain.length - 1];
+      const iFwd = pool.findIndex((s) => samePt(s[0], end));
+      const iRev = pool.findIndex((s) => samePt(s[s.length - 1], end));
+      if (iFwd === -1 && iRev === -1) break;
+
+      const idx = iFwd >= 0 ? iFwd : iRev;
+      let seg = pool.splice(idx, 1)[0];
+      if (iFwd === -1) seg = [...seg].reverse();
+      chain = chain.concat(seg.slice(1));
+    }
+
+    if (chain.length > 3 && samePt(chain[0], chain[chain.length - 1])) {
+      rings.push(chain);
+    }
+  }
+
+  return rings;
+}
+
+/**
+ * Fetch a real OSM administrative polygon. Admin levels in Cuba:
+ *   4 = province · 6 = municipality (Havana's municipios) · 8 = city seats.
+ */
+async function loadAdminBoundary(
   name: string,
+  adminLevel: string,
   provincia: string | null,
 ): Promise<Ring[] | null> {
   const b = regionFor(provincia).bounds;
   const bbox = `${b[0][0] - 1},${b[0][1] - 1},${b[1][0] + 1},${b[1][1] + 1}`;
-  const query = `[out:json][timeout:20];rel["boundary"="administrative"]["name"="${name}"](${bbox});out geom;`;
+  const query = `[out:json][timeout:25];rel["boundary"="administrative"]["name"="${name}"]["admin_level"="${adminLevel}"](${bbox});out geom;`;
   const url =
     "https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query);
 
@@ -58,28 +83,29 @@ async function loadMunicipioBoundary(
   if (!res.ok) return null;
 
   const json = await res.json();
+  type OverpassRel = {
+    type: string;
+    tags?: { name?: string };
+    members?: { role?: string; geometry?: { lat: number; lon: number }[] }[];
+  };
+  const elements = json.elements as OverpassRel[];
   const rel =
-    json.elements.find(
-      (e: { type: string; tags?: { name?: string } }) =>
-        e.type === "relation" && e.tags?.name === name,
-    ) ?? json.elements.find((e: { type: string }) => e.type === "relation");
+    elements.find((e) => e.type === "relation" && e.tags?.name === name) ??
+    elements.find((e) => e.type === "relation");
   if (!rel?.members) return null;
 
-  const rings: Ring[] = [];
-  for (const m of rel.members) {
-    if (!m.geometry || m.role === "inner") continue;
-    const ring: Ring = m.geometry.map((g: { lat: number; lon: number }) => [
-      g.lat,
-      g.lon,
-    ]);
-    if (ring.length > 2) rings.push(ring);
-  }
+  // Boundary ways are open segments; assemble them into closed rings.
+  const segments: Ring[] = rel.members
+    .filter((m) => m.geometry && m.role !== "inner")
+    .map((m) => m.geometry!.map((g) => [g.lat, g.lon] as [number, number]));
+
+  const rings = assembleClosedRings(segments);
   return rings.length > 0 ? rings : null;
 }
 
-/** Approximate municipality radius for the fallback circle (meters). */
+/** Approximate radius for the fallback delimitation circle (meters). */
 function municipioRadius(provincia?: string | null): number {
-  return provincia === "Sancti Spíritus" ? 9_000 : 2_600;
+  return provincia && provincia !== "La Habana" ? 9_000 : 2_600;
 }
 
 function circlePoints(lat: number, lng: number, radiusM: number): Ring {
@@ -93,10 +119,26 @@ function circlePoints(lat: number, lng: number, radiusM: number): Ring {
   return pts;
 }
 
+const glyphCache = new Map<string, string>();
+
+/** In-memory boundary cache: switching municipios never refetches. */
+const boundaryCache = new Map<string, Ring[]>();
+
+/** Render a Phosphor icon to an SVG string once per product. */
+function productGlyph(slug: string): string {
+  let html = glyphCache.get(slug);
+  if (html === undefined) {
+    html = renderToStaticMarkup(<ProductIcon slug={slug} size={15} />);
+    glyphCache.set(slug, html);
+  }
+  return html;
+}
+
 export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const frameRef = useRef<(() => void) | null>(null);
+  const boundaryRingsRef = useRef<Ring[] | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
   useEffect(() => {
@@ -133,6 +175,7 @@ export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }
     return () => {
       cancelled = true;
       frameRef.current = null;
+      boundaryRingsRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -150,34 +193,24 @@ export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }
       const region = regionFor(focusProvincia);
       if (cancelled || !map) return;
 
-      map.setMinZoom(region.minZoom);
-      map.setMaxBounds(L.latLngBounds(region.bounds).pad(0.08));
-
       map.eachLayer((layer) => {
         if ("_url" in layer) return; // keep tiles
         map.removeLayer(layer);
       });
 
+      // Only mappable stock points; out-of-stock claims stay list-only.
       const stockPoints = rows.filter(
         (r) => r.lat !== null && r.lng !== null && r.availability === "available",
       );
 
-      // --- Municipality boundary + dim-out mask ---------------------------
+      // --- Boundary of selected city/municipality --------------------------
+      // LOW priority on load: markers paint immediately; boundaries arrive
+      // when Overpass answers (memory cache + Service Worker cache).
       const mc = focusMunicipio ? MUNICIPIO_CENTERS[focusMunicipio] : undefined;
-      if (mc && focusMunicipio) {
-        let rings: Ring[] | null = null;
-        try {
-          rings = await loadMunicipioBoundary(focusMunicipio, focusProvincia ?? null);
-        } catch {
-          rings = null; // overpass down / offline -> fallback below
-        }
-        if (cancelled) return;
 
-        if (!rings) {
-          rings = [circlePoints(mc.lat, mc.lng, municipioRadius(focusProvincia))];
-        }
-
-        // Dim the whole region EXCEPT the municipality (polygon hole).
+      const drawBoundary = (rings: Ring[]) => {
+        if (cancelled || !mapRef.current) return;
+        const mapNow = mapRef.current;
         const outer: [number, number][] = [
           [region.bounds[1][0] + 1, region.bounds[0][1] - 1],
           [region.bounds[1][0] + 1, region.bounds[1][1] + 1],
@@ -189,8 +222,7 @@ export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }
           fillColor: "#1b1813",
           fillOpacity: 0.16,
           interactive: false,
-        }).addTo(map);
-
+        }).addTo(mapNow);
         for (const ring of rings) {
           L.polygon(ring, {
             color: "#c2410c",
@@ -198,11 +230,84 @@ export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }
             dashArray: "6 6",
             fill: false,
             interactive: false,
-          }).addTo(map);
+          }).addTo(mapNow);
+        }
+        frameRef.current?.(); // re-frame once the real shape is known
+      };
+
+      if (mc && focusMunicipio) {
+        const levels = focusProvincia === "La Habana" ? ["6"] : ["8", "6"];
+        const cacheKey = `${focusMunicipio}|${levels.join(",")}|${focusProvincia ?? ""}`;
+        const cached = boundaryCache.get(cacheKey);
+        if (cached) {
+          boundaryRingsRef.current = cached;
+          drawBoundary(cached);
+        } else {
+          void (async () => {
+            let fetched: Ring[] | null = null;
+            for (const level of levels) {
+              try {
+                fetched = await loadAdminBoundary(
+                  focusMunicipio!,
+                  level,
+                  focusProvincia ?? null,
+                );
+              } catch {
+                fetched = null;
+              }
+              if (fetched || cancelled) break;
+            }
+            if (!fetched && !cancelled && mc) {
+              fetched = [circlePoints(mc.lat, mc.lng, municipioRadius(focusProvincia))];
+            }
+            if (!fetched || cancelled) return;
+            boundaryCache.set(cacheKey, fetched);
+            boundaryRingsRef.current = fetched;
+            drawBoundary(fetched);
+          })();
+        }
+      } else if (!focusMunicipio && focusProvincia === "La Habana") {
+        // Whole-city view: La Habana's own silhouette (admin_level=4).
+        // Also low priority: fetched in the background, drawn on arrival.
+        const cacheKey = "silueta-habana|4";
+        const cached = boundaryCache.get(cacheKey);
+        if (cached) {
+          boundaryRingsRef.current = cached;
+          for (const ring of cached) {
+            L.polygon(ring, {
+              color: "#c2410c",
+              weight: 3,
+              dashArray: "8 6",
+              fill: false,
+              interactive: false,
+            }).addTo(map);
+          }
+          frameRef.current?.();
+        } else {
+          void (async () => {
+            try {
+              const rings = await loadAdminBoundary("La Habana", "4", focusProvincia);
+              if (!rings || cancelled) return;
+              boundaryCache.set(cacheKey, rings);
+              boundaryRingsRef.current = rings;
+              if (!mapRef.current) return;
+              for (const ring of rings) {
+                L.polygon(ring, {
+                  color: "#c2410c",
+                  weight: 3,
+                  dashArray: "8 6",
+                  fill: false,
+                  interactive: false,
+                }).addTo(mapRef.current);
+              }
+              frameRef.current?.();
+            } catch {
+              /* silhouette is progressive enhancement */
+            }
+          })();
         }
       }
 
-      // --- Markers ---------------------------------------------------------
       for (const p of stockPoints) {
         const ageMin = (Date.now() - new Date(p.last_seen_at).getTime()) / 60_000;
         const strong = p.reporter_count >= 2 || ageMin <= 30;
@@ -237,7 +342,18 @@ export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }
       }
 
       // --- Framing (also used by the recenter button) ----------------------
+      // Priority: the real boundary polygon when known (nothing gets cut),
+      // then stock points, then region default.
       const frame = () => {
+        const mc = focusMunicipio ? MUNICIPIO_CENTERS[focusMunicipio] : undefined;
+        if (mc && boundaryRingsRef.current) {
+          const b = L.latLngBounds([]);
+          for (const ring of boundaryRingsRef.current) {
+            for (const pt of ring) b.extend(pt);
+          }
+          map.fitBounds(b.pad(0.12), { maxZoom: 16 });
+          return;
+        }
         if (mc) {
           if (stockPoints.length > 0) {
             const b = L.latLngBounds([]);
@@ -307,7 +423,6 @@ export default function AvailabilityMap({ rows, focusMunicipio, focusProvincia }
           </span>
           Reporte único
         </span>
-        <span>Límite municipal con datos de OpenStreetMap</span>
         <span className="ml-auto">© OpenStreetMap contributors</span>
       </div>
     </div>
