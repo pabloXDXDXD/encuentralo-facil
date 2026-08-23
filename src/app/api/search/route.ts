@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { pool } from "@/lib/db";
+import { query } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const { rows } = await pool.query(
+    const { rows } = await query(
       `select * from public.search_availability($1,$2::float8,$3::float8,$4::int,$5::int,$6::bool)`,
       [
         q,

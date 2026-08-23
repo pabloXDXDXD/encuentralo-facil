@@ -438,7 +438,7 @@ export default function HomeView({
               type="button"
               role="tab"
               aria-selected={view === "list"}
-              onClick={() => setView("list")}
+              onClick={() => { setView("list"); setShowViewPanel(false); }}
               className={`btn justify-center gap-2 rounded-md py-2 text-sm font-bold ${
                 view === "list" ? "bg-ink text-paper" : "btn-ghost"
               }`}
@@ -449,7 +449,7 @@ export default function HomeView({
               type="button"
               role="tab"
               aria-selected={view === "map"}
-              onClick={() => setView("map")}
+              onClick={() => { setView("map"); setShowViewPanel(false); }}
               className={`btn justify-center gap-2 rounded-md py-2 text-sm font-bold ${
                 view === "map" ? "bg-ink text-paper" : "btn-ghost"
               }`}

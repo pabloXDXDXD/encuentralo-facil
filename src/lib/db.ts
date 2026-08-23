@@ -24,21 +24,26 @@ if (process.env.NODE_ENV !== "production") {
 const TRANSIENT_CODES = new Set(["ECONNRESET", "EPIPE", "ETIMEDOUT", "ECONNREFUSED"]);
 
 /**
- * Query with one automatic retry against a fresh connection when the failure
- * is a dropped socket (the pooler resets idle connections). Everything else
- * propagates untouched.
+ * Query with automatic retries on dropped sockets (the shared pooler resets
+ * idle connections and the network flaps). Waits grow per attempt so a short
+ * network storm doesn't take requests down with it.
  */
 export async function query<T extends QueryResultRow>(
   text: string,
   params?: unknown[],
 ): Promise<QueryResult<T>> {
-  try {
-    return await pool.query<T>(text, params as never[]);
-  } catch (err) {
-    const code = (err as { code?: string }).code ?? "";
-    if (TRANSIENT_CODES.has(code)) {
+  const waits = [0, 300, 1500];
+  let lastError: unknown;
+
+  for (const wait of waits) {
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    try {
       return await pool.query<T>(text, params as never[]);
+    } catch (err) {
+      lastError = err;
+      const code = (err as { code?: string }).code ?? "";
+      if (!TRANSIENT_CODES.has(code)) throw err;
     }
-    throw err;
   }
+  throw lastError;
 }

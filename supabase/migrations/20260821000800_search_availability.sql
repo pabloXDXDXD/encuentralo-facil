@@ -62,7 +62,7 @@ as $$
     from reports r
     where r.product_id in (select id from matched_products)
       and r.created_at > now() - interval '6 hours'
-      and r.store_id in (select id from inradius)
+      and r.store_id in (select sid from inradius)
     group by r.store_id
   ),
   priced as (
@@ -72,7 +72,7 @@ as $$
       and r.availability = 'available'
       and r.price_cup is not null
       and r.created_at > now() - interval '6 hours'
-      and r.store_id in (select id from inradius)
+      and r.store_id in (select sid from inradius)
     group by r.store_id
   )
   select st.sid, st.sname, st.sbarrio,

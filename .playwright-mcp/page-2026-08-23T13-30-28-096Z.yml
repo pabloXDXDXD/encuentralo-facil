@@ -1,0 +1,751 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - link "DóndeHay inicio" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e6]: DóndeHay
+      - navigation [ref=e7]:
+        - link "Cómo funciona" [ref=e8] [cursor=pointer]:
+          - /url: /como-funciona
+  - main [ref=e9]:
+    - generic [ref=e10]:
+      - generic [ref=e12]:
+        - img [ref=e13]
+        - textbox "Buscar producto" [ref=e15]:
+          - /placeholder: Buscar producto… (ej. pollo)
+      - generic [ref=e16]:
+        - button "Cambiar ubicación" [ref=e17]:
+          - img [ref=e18]
+        - button "Opciones de vista" [ref=e20]:
+          - img [ref=e21]
+        - generic [ref=e23]: Toda Cuba
+      - button "⭐ Mis búsquedas filtrar" [ref=e24]:
+        - generic [ref=e25]: ⭐ Mis búsquedas
+        - generic [ref=e26]: filtrar
+      - generic [ref=e27]:
+        - heading "Plaza de la Revolución 3" [level=2] [ref=e28]:
+          - generic [ref=e29]: Plaza de la Revolución
+          - generic [ref=e31]: "3"
+        - article [ref=e32]:
+          - generic [ref=e33]:
+            - button "Guardar Pollo en búsquedas" [ref=e34]:
+              - img [ref=e35]
+            - img [ref=e37]
+            - generic [ref=e39]:
+              - paragraph [ref=e40]:
+                - link "Pollo" [ref=e41] [cursor=pointer]:
+                  - /url: /producto/pollo
+              - paragraph [ref=e42]: Agropecuario 19 y B
+              - paragraph [ref=e43]: hace 19 min
+            - generic [ref=e44]:
+              - generic [ref=e45]: $400
+              - generic [ref=e46]: Hay
+          - generic [ref=e48]:
+            - generic [ref=e49]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e50]:
+              - img [ref=e51]
+              - text: Lo vi
+            - button "Desmentir" [ref=e53]:
+              - img [ref=e54]
+              - text: Ya no hay
+        - article [ref=e56]:
+          - generic [ref=e57]:
+            - button "Guardar Huevos en búsquedas" [ref=e58]:
+              - img [ref=e59]
+            - img [ref=e61]
+            - generic [ref=e63]:
+              - paragraph [ref=e64]:
+                - link "Huevos" [ref=e65] [cursor=pointer]:
+                  - /url: /producto/huevos
+              - paragraph [ref=e66]: Agropecuario 19 y B
+              - paragraph [ref=e67]: hace 36 min
+            - generic [ref=e68]:
+              - generic [ref=e69]: $180
+              - generic [ref=e70]: Hay
+          - generic [ref=e72]:
+            - generic [ref=e73]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e74]:
+              - img [ref=e75]
+              - text: Lo vi
+            - button "Desmentir" [ref=e77]:
+              - img [ref=e78]
+              - text: Ya no hay
+        - article [ref=e80]:
+          - generic [ref=e81]:
+            - button "Guardar Café molido en búsquedas" [ref=e82]:
+              - img [ref=e83]
+            - img [ref=e85]
+            - generic [ref=e87]:
+              - paragraph [ref=e88]:
+                - link "Café molido" [ref=e89] [cursor=pointer]:
+                  - /url: /producto/cafe
+              - paragraph [ref=e90]: MIPYME El Vedadito
+              - paragraph [ref=e91]: hace 1 h
+            - generic [ref=e92]:
+              - generic [ref=e93]: $950
+              - generic [ref=e94]: Hay
+          - generic [ref=e96]:
+            - generic [ref=e97]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e98]:
+              - img [ref=e99]
+              - text: Lo vi
+            - button "Desmentir" [ref=e101]:
+              - img [ref=e102]
+              - text: Ya no hay
+      - generic [ref=e104]:
+        - heading "Playa 4" [level=2] [ref=e105]:
+          - generic [ref=e106]: Playa
+          - generic [ref=e108]: "4"
+        - article [ref=e109]:
+          - generic [ref=e110]:
+            - button "Guardar Queso en búsquedas" [ref=e111]:
+              - img [ref=e112]
+            - img [ref=e114]
+            - generic [ref=e116]:
+              - paragraph [ref=e117]:
+                - link "Queso" [ref=e118] [cursor=pointer]:
+                  - /url: /producto/queso
+              - paragraph [ref=e119]: MIPYME Miramar Gourmet
+              - paragraph [ref=e120]: hace 24 min
+            - generic [ref=e121]:
+              - generic [ref=e122]: $1,400
+              - generic [ref=e123]: Hay
+          - generic [ref=e125]:
+            - generic [ref=e126]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e127]:
+              - img [ref=e128]
+              - text: Lo vi
+            - button "Desmentir" [ref=e130]:
+              - img [ref=e131]
+              - text: Ya no hay
+        - article [ref=e133]:
+          - generic [ref=e134]:
+            - button "Guardar Carne de cerdo en búsquedas" [ref=e135]:
+              - img [ref=e136]
+            - img [ref=e138]
+            - generic [ref=e140]:
+              - paragraph [ref=e141]:
+                - link "Carne de cerdo" [ref=e142] [cursor=pointer]:
+                  - /url: /producto/cerdo
+              - paragraph [ref=e143]: Mercado Cubanacán
+              - paragraph [ref=e144]: hace 30 min
+            - generic [ref=e145]:
+              - generic [ref=e146]: $350
+              - generic [ref=e147]: Hay
+          - generic [ref=e149]:
+            - generic [ref=e150]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e151]:
+              - img [ref=e152]
+              - text: Lo vi
+            - button "Desmentir" [ref=e154]:
+              - img [ref=e155]
+              - text: Ya no hay
+        - article [ref=e157]:
+          - generic [ref=e158]:
+            - button "Guardar Pan en búsquedas" [ref=e159]:
+              - img [ref=e160]
+            - img [ref=e162]
+            - generic [ref=e164]:
+              - paragraph [ref=e165]:
+                - link "Pan" [ref=e166] [cursor=pointer]:
+                  - /url: /producto/pan
+              - paragraph [ref=e167]: Bodega Kohly
+              - paragraph [ref=e168]: hace 48 min
+            - generic [ref=e169]:
+              - generic [ref=e170]: $95
+              - generic [ref=e171]: Hay
+          - generic [ref=e173]:
+            - generic [ref=e174]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e175]:
+              - img [ref=e176]
+              - text: Lo vi
+            - button "Desmentir" [ref=e178]:
+              - img [ref=e179]
+              - text: Ya no hay
+        - article [ref=e181]:
+          - generic [ref=e182]:
+            - button "Guardar Pescado en búsquedas" [ref=e183]:
+              - img [ref=e184]
+            - img [ref=e186]
+            - generic [ref=e188]:
+              - paragraph [ref=e189]:
+                - link "Pescado" [ref=e190] [cursor=pointer]:
+                  - /url: /producto/pescado
+              - paragraph [ref=e191]: Agropecuario Siboney
+              - paragraph [ref=e192]: hace 1 h
+            - generic [ref=e193]:
+              - generic [ref=e194]: $600
+              - generic [ref=e195]: Hay
+          - generic [ref=e197]:
+            - generic [ref=e198]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e199]:
+              - img [ref=e200]
+              - text: Lo vi
+            - button "Desmentir" [ref=e202]:
+              - img [ref=e203]
+              - text: Ya no hay
+      - generic [ref=e205]:
+        - heading "Marianao 3" [level=2] [ref=e206]:
+          - generic [ref=e207]: Marianao
+          - generic [ref=e209]: "3"
+        - article [ref=e210]:
+          - generic [ref=e211]:
+            - button "Guardar Plátano en búsquedas" [ref=e212]:
+              - img [ref=e213]
+            - img [ref=e215]
+            - generic [ref=e217]:
+              - paragraph [ref=e218]:
+                - link "Plátano" [ref=e219] [cursor=pointer]:
+                  - /url: /producto/platano
+              - paragraph [ref=e220]: Agropecuario Marianao
+              - paragraph [ref=e221]: hace 26 min
+            - generic [ref=e222]:
+              - generic [ref=e223]: $60
+              - generic [ref=e224]: Hay
+          - generic [ref=e226]:
+            - generic [ref=e227]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e228]:
+              - img [ref=e229]
+              - text: Lo vi
+            - button "Desmentir" [ref=e231]:
+              - img [ref=e232]
+              - text: Ya no hay
+        - article [ref=e234]:
+          - generic [ref=e235]:
+            - button "Guardar Cebolla en búsquedas" [ref=e236]:
+              - img [ref=e237]
+            - img [ref=e239]
+            - generic [ref=e241]:
+              - paragraph [ref=e242]:
+                - link "Cebolla" [ref=e243] [cursor=pointer]:
+                  - /url: /producto/cebolla
+              - paragraph [ref=e244]: Mercado Puentes Grandes
+              - paragraph [ref=e245]: hace 42 min
+            - generic [ref=e246]:
+              - generic [ref=e247]: $150
+              - generic [ref=e248]: Hay
+          - generic [ref=e250]:
+            - generic [ref=e251]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e252]:
+              - img [ref=e253]
+              - text: Lo vi
+            - button "Desmentir" [ref=e255]:
+              - img [ref=e256]
+              - text: Ya no hay
+        - article [ref=e258]:
+          - generic [ref=e259]:
+            - button "Guardar Mango en búsquedas" [ref=e260]:
+              - img [ref=e261]
+            - img [ref=e263]
+            - generic [ref=e265]:
+              - paragraph [ref=e266]:
+                - link "Mango" [ref=e267] [cursor=pointer]:
+                  - /url: /producto/mango
+              - paragraph [ref=e268]: MIPYME El Bosque
+              - paragraph [ref=e269]: hace 56 min
+            - generic [ref=e270]:
+              - generic [ref=e271]: $100
+              - generic [ref=e272]: Hay
+          - generic [ref=e274]:
+            - generic [ref=e275]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e276]:
+              - img [ref=e277]
+              - text: Lo vi
+            - button "Desmentir" [ref=e279]:
+              - img [ref=e280]
+              - text: Ya no hay
+      - generic [ref=e282]:
+        - heading "Sancti Spíritus 2" [level=2] [ref=e283]:
+          - generic [ref=e284]: Sancti Spíritus
+          - generic [ref=e286]: "2"
+        - article [ref=e287]:
+          - generic [ref=e288]:
+            - button "Guardar Arroz en búsquedas" [ref=e289]:
+              - img [ref=e290]
+            - img [ref=e292]
+            - generic [ref=e294]:
+              - paragraph [ref=e295]:
+                - link "Arroz" [ref=e296] [cursor=pointer]:
+                  - /url: /producto/arroz
+              - paragraph [ref=e297]: Agropecuario Circunvalación
+              - paragraph [ref=e298]: hace 28 min
+            - generic [ref=e299]:
+              - generic [ref=e300]: $340
+              - generic [ref=e301]: Hay
+          - generic [ref=e303]:
+            - generic [ref=e304]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e305]:
+              - img [ref=e306]
+              - text: Lo vi
+            - button "Desmentir" [ref=e308]:
+              - img [ref=e309]
+              - text: Ya no hay
+        - article [ref=e311]:
+          - generic [ref=e312]:
+            - button "Guardar Aceite vegetal en búsquedas" [ref=e313]:
+              - img [ref=e314]
+            - img [ref=e316]
+            - generic [ref=e318]:
+              - paragraph [ref=e319]:
+                - link "Aceite vegetal" [ref=e320] [cursor=pointer]:
+                  - /url: /producto/aceite
+              - paragraph [ref=e321]: Bodega Céspedes
+              - paragraph [ref=e322]: hace 59 min
+            - generic [ref=e323]:
+              - generic [ref=e324]: $1,750
+              - generic [ref=e325]: Hay
+          - generic [ref=e327]:
+            - generic [ref=e328]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e329]:
+              - img [ref=e330]
+              - text: Lo vi
+            - button "Desmentir" [ref=e332]:
+              - img [ref=e333]
+              - text: Ya no hay
+      - generic [ref=e335]:
+        - heading "Regla 1" [level=2] [ref=e336]:
+          - generic [ref=e337]: Regla
+          - generic [ref=e339]: "1"
+        - article [ref=e340]:
+          - generic [ref=e341]:
+            - button "Guardar Maíz en grano en búsquedas" [ref=e342]:
+              - img [ref=e343]
+            - img [ref=e345]
+            - generic [ref=e347]:
+              - paragraph [ref=e348]:
+                - link "Maíz en grano" [ref=e349] [cursor=pointer]:
+                  - /url: /producto/maiz-grano
+              - paragraph [ref=e350]: Agropecuario Regla
+              - paragraph [ref=e351]: hace 32 min
+            - generic [ref=e352]:
+              - generic [ref=e353]: $180
+              - generic [ref=e354]: Hay
+          - generic [ref=e356]:
+            - generic [ref=e357]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e358]:
+              - img [ref=e359]
+              - text: Lo vi
+            - button "Desmentir" [ref=e361]:
+              - img [ref=e362]
+              - text: Ya no hay
+      - generic [ref=e364]:
+        - heading "Centro Habana 3" [level=2] [ref=e365]:
+          - generic [ref=e366]: Centro Habana
+          - generic [ref=e368]: "3"
+        - article [ref=e369]:
+          - generic [ref=e370]:
+            - button "Guardar Picadillo de soya en búsquedas" [ref=e371]:
+              - img [ref=e372]
+            - img [ref=e374]
+            - generic [ref=e376]:
+              - paragraph [ref=e377]:
+                - link "Picadillo de soya" [ref=e378] [cursor=pointer]:
+                  - /url: /producto/soya
+              - paragraph [ref=e379]: Agropecuario Calzada del Monte
+              - paragraph [ref=e380]: hace 40 min
+            - generic [ref=e381]:
+              - generic [ref=e382]: $180
+              - generic [ref=e383]: Hay
+          - generic [ref=e385]:
+            - generic [ref=e386]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e387]:
+              - img [ref=e388]
+              - text: Lo vi
+            - button "Desmentir" [ref=e390]:
+              - img [ref=e391]
+              - text: Ya no hay
+        - article [ref=e393]:
+          - generic [ref=e394]:
+            - button "Guardar Aceite vegetal en búsquedas" [ref=e395]:
+              - img [ref=e396]
+            - img [ref=e398]
+            - generic [ref=e400]:
+              - paragraph [ref=e401]:
+                - link "Aceite vegetal" [ref=e402] [cursor=pointer]:
+                  - /url: /producto/aceite
+              - paragraph [ref=e403]: Caribe San Lázaro
+              - paragraph [ref=e404]: hace 52 min
+            - generic [ref=e405]:
+              - generic [ref=e406]: $1,850
+              - generic [ref=e407]: Hay
+          - generic [ref=e409]:
+            - generic [ref=e410]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e411]:
+              - img [ref=e412]
+              - text: Lo vi
+            - button "Desmentir" [ref=e414]:
+              - img [ref=e415]
+              - text: Ya no hay
+        - article [ref=e417]:
+          - generic [ref=e418]:
+            - button "Guardar Papel sanitario en búsquedas" [ref=e419]:
+              - img [ref=e420]
+            - img [ref=e422]
+            - generic [ref=e424]:
+              - paragraph [ref=e425]:
+                - link "Papel sanitario" [ref=e426] [cursor=pointer]:
+                  - /url: /producto/papel-sanitario
+              - paragraph [ref=e427]: MIPYME El Ángel
+              - paragraph [ref=e428]: hace 1 h
+            - generic [ref=e429]:
+              - generic [ref=e430]: $250
+              - generic [ref=e431]: Hay
+          - generic [ref=e433]:
+            - generic [ref=e434]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e435]:
+              - img [ref=e436]
+              - text: Lo vi
+            - button "Desmentir" [ref=e438]:
+              - img [ref=e439]
+              - text: Ya no hay
+      - generic [ref=e441]:
+        - heading "Trinidad 1" [level=2] [ref=e442]:
+          - generic [ref=e443]: Trinidad
+          - generic [ref=e445]: "1"
+        - article [ref=e446]:
+          - generic [ref=e447]:
+            - button "Guardar Ron en búsquedas" [ref=e448]:
+              - img [ref=e449]
+            - img [ref=e451]
+            - generic [ref=e453]:
+              - paragraph [ref=e454]:
+                - link "Ron" [ref=e455] [cursor=pointer]:
+                  - /url: /producto/ron
+              - paragraph [ref=e456]: Mercado Municipal Trinidad
+              - paragraph [ref=e457]: hace 44 min
+            - generic [ref=e458]:
+              - generic [ref=e459]: $900
+              - generic [ref=e460]: Hay
+          - generic [ref=e462]:
+            - generic [ref=e463]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e464]:
+              - img [ref=e465]
+              - text: Lo vi
+            - button "Desmentir" [ref=e467]:
+              - img [ref=e468]
+              - text: Ya no hay
+      - generic [ref=e470]:
+        - heading "Guanabacoa 1" [level=2] [ref=e471]:
+          - generic [ref=e472]: Guanabacoa
+          - generic [ref=e474]: "1"
+        - article [ref=e475]:
+          - generic [ref=e476]:
+            - button "Guardar Limón en búsquedas" [ref=e477]:
+              - img [ref=e478]
+            - img [ref=e480]
+            - generic [ref=e482]:
+              - paragraph [ref=e483]:
+                - link "Limón" [ref=e484] [cursor=pointer]:
+                  - /url: /producto/limon
+              - paragraph [ref=e485]: Bodega Guanabacoa
+              - paragraph [ref=e486]: hace 49 min
+            - generic [ref=e487]:
+              - generic [ref=e488]: $80
+              - generic [ref=e489]: Hay
+          - generic [ref=e491]:
+            - generic [ref=e492]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e493]:
+              - img [ref=e494]
+              - text: Lo vi
+            - button "Desmentir" [ref=e496]:
+              - img [ref=e497]
+              - text: Ya no hay
+      - generic [ref=e499]:
+        - heading "Cerro 1" [level=2] [ref=e500]:
+          - generic [ref=e501]: Cerro
+          - generic [ref=e503]: "1"
+        - article [ref=e504]:
+          - generic [ref=e505]:
+            - button "Guardar Arroz en búsquedas" [ref=e506]:
+              - img [ref=e507]
+            - img [ref=e509]
+            - generic [ref=e511]:
+              - paragraph [ref=e512]:
+                - link "Arroz" [ref=e513] [cursor=pointer]:
+                  - /url: /producto/arroz
+              - paragraph [ref=e514]: Mercado Cuatro Caminos
+              - paragraph [ref=e515]: hace 1 h
+            - generic [ref=e516]:
+              - generic [ref=e517]: $320
+              - generic [ref=e518]: Hay
+          - generic [ref=e520]:
+            - generic [ref=e521]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e522]:
+              - img [ref=e523]
+              - text: Lo vi
+            - button "Desmentir" [ref=e525]:
+              - img [ref=e526]
+              - text: Ya no hay
+      - generic [ref=e528]:
+        - heading "La Lisa 2" [level=2] [ref=e529]:
+          - generic [ref=e530]: La Lisa
+          - generic [ref=e532]: "2"
+        - article [ref=e533]:
+          - generic [ref=e534]:
+            - button "Guardar Boniato en búsquedas" [ref=e535]:
+              - img [ref=e536]
+            - img [ref=e538]
+            - generic [ref=e540]:
+              - paragraph [ref=e541]:
+                - link "Boniato" [ref=e542] [cursor=pointer]:
+                  - /url: /producto/boniato
+              - paragraph [ref=e543]: Mercado La Lisa
+              - paragraph [ref=e544]: hace 1 h
+            - generic [ref=e545]:
+              - generic [ref=e546]: $120
+              - generic [ref=e547]: Hay
+          - generic [ref=e549]:
+            - generic [ref=e550]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e551]:
+              - img [ref=e552]
+              - text: Lo vi
+            - button "Desmentir" [ref=e554]:
+              - img [ref=e555]
+              - text: Ya no hay
+        - article [ref=e557]:
+          - generic [ref=e558]:
+            - button "Guardar Yuca en búsquedas" [ref=e559]:
+              - img [ref=e560]
+            - img [ref=e562]
+            - generic [ref=e564]:
+              - paragraph [ref=e565]:
+                - link "Yuca" [ref=e566] [cursor=pointer]:
+                  - /url: /producto/yuca
+              - paragraph [ref=e567]: Agropecuario Arroyo Arenas
+              - paragraph [ref=e568]: hace 1 h
+            - generic [ref=e569]:
+              - generic [ref=e570]: $90
+              - generic [ref=e571]: Hay
+          - generic [ref=e573]:
+            - generic [ref=e574]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e575]:
+              - img [ref=e576]
+              - text: Lo vi
+            - button "Desmentir" [ref=e578]:
+              - img [ref=e579]
+              - text: Ya no hay
+      - generic [ref=e581]:
+        - heading "Diez de Octubre 3" [level=2] [ref=e582]:
+          - generic [ref=e583]: Diez de Octubre
+          - generic [ref=e585]: "3"
+        - article [ref=e586]:
+          - generic [ref=e587]:
+            - button "Guardar Pasta en búsquedas" [ref=e588]:
+              - img [ref=e589]
+            - img [ref=e591]
+            - generic [ref=e593]:
+              - paragraph [ref=e594]:
+                - link "Pasta" [ref=e595] [cursor=pointer]:
+                  - /url: /producto/pasta
+              - paragraph [ref=e596]: Mercado Jesús del Monte
+              - paragraph [ref=e597]: hace 1 h
+            - generic [ref=e598]:
+              - generic [ref=e599]: $260
+              - generic [ref=e600]: Hay
+          - generic [ref=e602]:
+            - generic [ref=e603]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e604]:
+              - img [ref=e605]
+              - text: Lo vi
+            - button "Desmentir" [ref=e607]:
+              - img [ref=e608]
+              - text: Ya no hay
+        - article [ref=e610]:
+          - generic [ref=e611]:
+            - button "Guardar Frijoles negros en búsquedas" [ref=e612]:
+              - img [ref=e613]
+            - img [ref=e615]
+            - generic [ref=e617]:
+              - paragraph [ref=e618]:
+                - link "Frijoles negros" [ref=e619] [cursor=pointer]:
+                  - /url: /producto/frijoles-negros
+              - paragraph [ref=e620]: Agropecuario Dolores
+              - paragraph [ref=e621]: hace 1 h
+            - generic [ref=e622]:
+              - generic [ref=e623]: $480
+              - generic [ref=e624]: Hay
+          - generic [ref=e626]:
+            - generic [ref=e627]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e628]:
+              - img [ref=e629]
+              - text: Lo vi
+            - button "Desmentir" [ref=e631]:
+              - img [ref=e632]
+              - text: Ya no hay
+        - article [ref=e634]:
+          - generic [ref=e635]:
+            - button "Guardar Leche en polvo en búsquedas" [ref=e636]:
+              - img [ref=e637]
+            - img [ref=e639]
+            - generic [ref=e641]:
+              - paragraph [ref=e642]:
+                - link "Leche en polvo" [ref=e643] [cursor=pointer]:
+                  - /url: /producto/leche-polvo
+              - paragraph [ref=e644]: Mercado Víbora
+              - paragraph [ref=e645]: hace 1 h
+            - generic [ref=e647]: No hay
+          - generic [ref=e649]:
+            - generic [ref=e650]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e651]:
+              - img [ref=e652]
+              - text: Lo vi
+            - button "Desmentir" [ref=e654]:
+              - img [ref=e655]
+              - text: Ya no hay
+      - generic [ref=e657]:
+        - heading "Cabaiguán 1" [level=2] [ref=e658]:
+          - generic [ref=e659]: Cabaiguán
+          - generic [ref=e661]: "1"
+        - article [ref=e662]:
+          - generic [ref=e663]:
+            - button "Guardar Detergente en búsquedas" [ref=e664]:
+              - img [ref=e665]
+            - img [ref=e667]
+            - generic [ref=e669]:
+              - paragraph [ref=e670]:
+                - link "Detergente" [ref=e671] [cursor=pointer]:
+                  - /url: /producto/detergente
+              - paragraph [ref=e672]: MIPYME El Puente
+              - paragraph [ref=e673]: hace 1 h
+            - generic [ref=e674]:
+              - generic [ref=e675]: $820
+              - generic [ref=e676]: Hay
+          - generic [ref=e678]:
+            - generic [ref=e679]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e680]:
+              - img [ref=e681]
+              - text: Lo vi
+            - button "Desmentir" [ref=e683]:
+              - img [ref=e684]
+              - text: Ya no hay
+      - generic [ref=e686]:
+        - heading "Cotorro 1" [level=2] [ref=e687]:
+          - generic [ref=e688]: Cotorro
+          - generic [ref=e690]: "1"
+        - article [ref=e691]:
+          - generic [ref=e692]:
+            - button "Guardar Galletas en búsquedas" [ref=e693]:
+              - img [ref=e694]
+            - img [ref=e696]
+            - generic [ref=e698]:
+              - paragraph [ref=e699]:
+                - link "Galletas" [ref=e700] [cursor=pointer]:
+                  - /url: /producto/galletas
+              - paragraph [ref=e701]: Mercado Cotorro
+              - paragraph [ref=e702]: hace 1 h
+            - generic [ref=e703]:
+              - generic [ref=e704]: $300
+              - generic [ref=e705]: Hay
+          - generic [ref=e707]:
+            - generic [ref=e708]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e709]:
+              - img [ref=e710]
+              - text: Lo vi
+            - button "Desmentir" [ref=e712]:
+              - img [ref=e713]
+              - text: Ya no hay
+      - generic [ref=e715]:
+        - heading "Jatibonico 1" [level=2] [ref=e716]:
+          - generic [ref=e717]: Jatibonico
+          - generic [ref=e719]: "1"
+        - article [ref=e720]:
+          - generic [ref=e721]:
+            - button "Guardar Huevos en búsquedas" [ref=e722]:
+              - img [ref=e723]
+            - img [ref=e725]
+            - generic [ref=e727]:
+              - paragraph [ref=e728]:
+                - link "Huevos" [ref=e729] [cursor=pointer]:
+                  - /url: /producto/huevos
+              - paragraph [ref=e730]: Caribe Jatibonico
+              - paragraph [ref=e731]: hace 1 h
+            - generic [ref=e732]:
+              - generic [ref=e733]: $170
+              - generic [ref=e734]: Hay
+          - generic [ref=e736]:
+            - generic [ref=e737]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e738]:
+              - img [ref=e739]
+              - text: Lo vi
+            - button "Desmentir" [ref=e741]:
+              - img [ref=e742]
+              - text: Ya no hay
+      - generic [ref=e744]:
+        - heading "Boyeros 2" [level=2] [ref=e745]:
+          - generic [ref=e746]: Boyeros
+          - generic [ref=e748]: "2"
+        - article [ref=e749]:
+          - generic [ref=e750]:
+            - button "Guardar Malta en búsquedas" [ref=e751]:
+              - img [ref=e752]
+            - img [ref=e754]
+            - generic [ref=e756]:
+              - paragraph [ref=e757]:
+                - link "Malta" [ref=e758] [cursor=pointer]:
+                  - /url: /producto/malta
+              - paragraph [ref=e759]: Agropecuario Santiago de las Vegas
+              - paragraph [ref=e760]: hace 1 h
+            - generic [ref=e761]:
+              - generic [ref=e762]: $520
+              - generic [ref=e763]: Hay
+          - generic [ref=e765]:
+            - generic [ref=e766]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e767]:
+              - img [ref=e768]
+              - text: Lo vi
+            - button "Desmentir" [ref=e770]:
+              - img [ref=e771]
+              - text: Ya no hay
+        - article [ref=e773]:
+          - generic [ref=e774]:
+            - button "Guardar Frijol colorado en búsquedas" [ref=e775]:
+              - img [ref=e776]
+            - img [ref=e778]
+            - generic [ref=e780]:
+              - paragraph [ref=e781]:
+                - link "Frijol colorado" [ref=e782] [cursor=pointer]:
+                  - /url: /producto/frijol-colorado
+              - paragraph [ref=e783]: Mercado Wajay
+              - paragraph [ref=e784]: hace 1 h
+            - generic [ref=e785]:
+              - generic [ref=e786]: $520
+              - generic [ref=e787]: Hay
+          - generic [ref=e789]:
+            - generic [ref=e790]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e791]:
+              - img [ref=e792]
+              - text: Lo vi
+            - button "Desmentir" [ref=e794]:
+              - img [ref=e795]
+              - text: Ya no hay
+      - generic [ref=e797]:
+        - heading "Yaguajay 1" [level=2] [ref=e798]:
+          - generic [ref=e799]: Yaguajay
+          - generic [ref=e801]: "1"
+        - article [ref=e802]:
+          - generic [ref=e803]:
+            - button "Guardar Picadillo de cerdo en búsquedas" [ref=e804]:
+              - img [ref=e805]
+            - img [ref=e807]
+            - generic [ref=e809]:
+              - paragraph [ref=e810]:
+                - link "Picadillo de cerdo" [ref=e811] [cursor=pointer]:
+                  - /url: /producto/picadillo
+              - paragraph [ref=e812]: Mercado Yaguajay
+              - paragraph [ref=e813]: hace 1 h
+            - generic [ref=e814]:
+              - generic [ref=e815]: $280
+              - generic [ref=e816]: Hay
+          - generic [ref=e818]:
+            - generic [ref=e819]: ¿Lo confirmas?
+            - button "Confirmar" [ref=e820]:
+              - img [ref=e821]
+              - text: Lo vi
+            - button "Desmentir" [ref=e823]:
+              - img [ref=e824]
+              - text: Ya no hay
+      - link "Reportar producto" [ref=e826] [cursor=pointer]:
+        - /url: /reportar
+        - img [ref=e827]
+  - contentinfo [ref=e829]: Hecho por y para el barrio · los reportes caducan a las 6 horas
+  - alert [ref=e830]
