@@ -34,3 +34,5 @@ supabase/.branches/
 # Testing
 test-results/
 playwright-report/
+
+# Playwright MCP artifacts.playwright-mcp/
