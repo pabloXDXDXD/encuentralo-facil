@@ -217,6 +217,17 @@ a:focus-visible {
   opacity: 0.7; /* no fresh data either way */
 }
 
+.map-pin--anchor {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--ink);
+}
+
+.map-picking,
+.map-picking * {
+  cursor: crosshair !important;
+}
+
 /* Leaflet popup restyled as a market ticket */
 .leaflet-popup-content-wrapper {
   border: 2px solid var(--ink);

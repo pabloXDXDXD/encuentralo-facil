@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import type { Map as LeafletMap } from "leaflet";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Crosshair } from "@phosphor-icons/react";
+import { Crosshair, MapPin } from "@phosphor-icons/react";
 import { MUNICIPIO_CENTERS, regionFor } from "@/lib/geo";
 import { ProductIcon } from "@/lib/product-icons";
 import { timeAgo } from "@/lib/format";
@@ -22,6 +22,9 @@ type Props = {
   points?: MapPoint[];
   focusMunicipio?: string | null;
   focusProvincia?: string | null;
+  /** When true: next map click sets the user's home anchor. */
+  pickMode?: boolean;
+  onPick?: (lat: number, lng: number) => void;
 };
 
 export type HomeRowLike = {
@@ -99,10 +102,13 @@ export default function AvailabilityMap({
   points,
   focusMunicipio,
   focusProvincia,
+  pickMode,
+  onPick,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const frameRef = useRef<(() => void) | null>(null);
+  const anchorMarkerRef = useRef<any>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
   useEffect(() => {
@@ -254,6 +260,55 @@ export default function AvailabilityMap({
       cancelled = true;
     };
   }, [rows, points, status, focusMunicipio, focusProvincia]);
+
+  // Pick mode: next click on the map becomes the user's home anchor.
+  useEffect(() => {
+    if (status !== "ready" || !pickMode) return;
+    const map = mapRef.current;
+    const container = containerRef.current;
+    if (!map || !container) return;
+
+    let cancelled = false;
+    container.classList.add("map-picking");
+
+    void (async () => {
+      const L = (await import("leaflet")).default;
+      if (cancelled || !map) return;
+
+      const place = (lat: number, lng: number) => {
+        const glyph = renderToStaticMarkup(<MapPin weight="fill" size={16} />);
+        const icon = L.divIcon({
+          className: "",
+          html: `<div class="map-pin map-pin--anchor">${glyph}</div>`,
+          iconSize: [32, 32],
+          iconAnchor: [16, 28],
+        });
+        if (anchorMarkerRef.current) {
+          anchorMarkerRef.current.setLatLng([lat, lng]);
+        } else {
+          anchorMarkerRef.current = L.marker([lat, lng], { icon, draggable: true }).addTo(map);
+          anchorMarkerRef.current.on("dragend", () => {
+            const p = anchorMarkerRef.current.getLatLng();
+            onPick?.(p.lat, p.lng);
+          });
+        }
+        onPick?.(lat, lng);
+        map.setView([lat, lng], Math.max(map.getZoom(), 14));
+      };
+
+      const handler = (e: L.LeafletMouseEvent) => place(e.latlng.lat, e.latlng.lng);
+      map.on("click", handler);
+
+      // If an anchor was already chosen, keep showing it while re-picking.
+      // (HomeView re-mounts us in pick mode with pickAnchor prop.)
+    })();
+
+    return () => {
+      cancelled = true;
+      container.classList.remove("map-picking");
+      if (map) map.off("click");
+    };
+  }, [status, pickMode, onPick]);
 
   return (
     <div className="card-ticket overflow-hidden">

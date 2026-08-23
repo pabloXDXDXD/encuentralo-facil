@@ -1,0 +1,132 @@
+- generic [ref=f5e1]:
+  - banner [ref=f5e2]:
+    - generic [ref=f5e3]:
+      - link "DóndeHay inicio" [ref=f5e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f5e6]: DóndeHay
+      - navigation [ref=f5e7]:
+        - link "Cómo funciona" [ref=f5e8] [cursor=pointer]:
+          - /url: /como-funciona
+  - main [ref=f5e9]:
+    - generic [ref=f5e10]:
+      - generic [ref=f5e12]:
+        - img [ref=f5e13]
+        - textbox "Buscar producto" [ref=f5e15]:
+          - /placeholder: Buscar producto… (ej. pollo)
+      - generic [ref=f5e16]:
+        - button "Cambiar ubicación" [ref=f5e17]:
+          - img [ref=f5e18]
+        - button "Opciones de vista" [ref=f5e20]:
+          - img [ref=f5e21]
+        - generic [ref=f5e23]:
+          - generic [ref=f5e823]: 📍 Punto en el mapa
+          - text: Toda Cuba
+      - generic [ref=f5e691]:
+        - generic [ref=f5e692]:
+          - application "Mapa de disponibilidad" [active] [ref=f5e693]:
+            - generic:
+              - generic:
+                - button [ref=f5e694] [cursor=pointer]:
+                  - generic "Confirmado" [ref=f5e695]:
+                    - img [ref=f5e696]
+                - button [ref=f5e698] [cursor=pointer]:
+                  - generic "Confirmado" [ref=f5e699]:
+                    - img [ref=f5e700]
+                - button [ref=f5e702] [cursor=pointer]:
+                  - generic "Confirmado" [ref=f5e703]:
+                    - img [ref=f5e704]
+                - button [ref=f5e706] [cursor=pointer]:
+                  - generic "Confirmado" [ref=f5e707]:
+                    - img [ref=f5e708]
+                - button [ref=f5e710] [cursor=pointer]:
+                  - generic "Confirmado" [ref=f5e711]:
+                    - img [ref=f5e712]
+                - button [ref=f5e714] [cursor=pointer]:
+                  - generic "Confirmado" [ref=f5e715]:
+                    - img [ref=f5e716]
+                - button [ref=f5e718] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e719]:
+                    - img [ref=f5e720]
+                - button [ref=f5e722] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e723]:
+                    - img [ref=f5e724]
+                - button [ref=f5e726] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e727]:
+                    - img [ref=f5e728]
+                - button [ref=f5e730] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e731]:
+                    - img [ref=f5e732]
+                - button [ref=f5e734] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e735]:
+                    - img [ref=f5e736]
+                - button [ref=f5e738] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e739]:
+                    - img [ref=f5e740]
+                - button [ref=f5e742] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e743]:
+                    - img [ref=f5e744]
+                - button [ref=f5e746] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e747]:
+                    - img [ref=f5e748]
+                - button [ref=f5e750] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e751]:
+                    - img [ref=f5e752]
+                - button [ref=f5e754] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e755]:
+                    - img [ref=f5e756]
+                - button [ref=f5e758] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e759]:
+                    - img [ref=f5e760]
+                - button [ref=f5e762] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e763]:
+                    - img [ref=f5e764]
+                - button [ref=f5e766] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e767]:
+                    - img [ref=f5e768]
+                - button [ref=f5e770] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e771]:
+                    - img [ref=f5e772]
+                - button [ref=f5e774] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e775]:
+                    - img [ref=f5e776]
+                - button [ref=f5e778] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e779]:
+                    - img [ref=f5e780]
+                - button [ref=f5e782] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e783]:
+                    - img [ref=f5e784]
+                - button [ref=f5e786] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e787]:
+                    - img [ref=f5e788]
+                - button [ref=f5e790] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e791]:
+                    - img [ref=f5e792]
+                - button [ref=f5e794] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e795]:
+                    - img [ref=f5e796]
+                - button [ref=f5e798] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e799]:
+                    - img [ref=f5e800]
+                - button [ref=f5e802] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e803]:
+                    - img [ref=f5e804]
+                - button [ref=f5e806] [cursor=pointer]:
+                  - generic "Fresco" [ref=f5e807]:
+                    - img [ref=f5e808]
+                - button [ref=f5e824] [cursor=pointer]:
+                  - img [ref=f5e826]
+          - button "Centrar en los resultados" [ref=f5e810]:
+            - img [ref=f5e811]
+        - generic [ref=f5e813]:
+          - generic [ref=f5e814]:
+            - generic [ref=f5e815]: ✚
+            - text: Hay · confirmado
+          - generic [ref=f5e816]:
+            - generic [ref=f5e817]: "?"
+            - text: Había · sin confirmar
+          - generic [ref=f5e818]: © OpenStreetMap contributors
+      - link "Reportar producto" [ref=f5e676] [cursor=pointer]:
+        - /url: /reportar
+        - img [ref=f5e677]
+  - contentinfo [ref=f5e679]: Hecho por y para el barrio · los reportes caducan a las 6 horas
+  - alert [ref=f5e819]

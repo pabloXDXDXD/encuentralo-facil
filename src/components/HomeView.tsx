@@ -12,6 +12,7 @@ import {
   GlobeHemisphereWest,
   ListBullets,
   MagnifyingGlass,
+  MapPin,
   MapTrifold,
   PlusCircle,
   SlidersHorizontal,
@@ -127,6 +128,8 @@ export default function HomeView({
   const [view, setView] = useState<"list" | "map">("list");
   const [showLocation, setShowLocation] = useState(false);
   const [showViewPanel, setShowViewPanel] = useState(false);
+  const [pickMode, setPickMode] = useState(false);
+  const [anchorLabel, setAnchorLabel] = useState<string | null>(null);
 
   // --- Search state ---------------------------------------------------------
   const [qInput, setQInput] = useState("");
@@ -216,6 +219,7 @@ export default function HomeView({
       (pos) => {
         const a = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setAnchor(a);
+        setAnchorLabel("GPS");
         try {
           localStorage.setItem("dh_home_anchor", JSON.stringify(a));
         } catch {}
@@ -224,6 +228,24 @@ export default function HomeView({
       () => setGpsBusy(false),
       { timeout: 8000 },
     );
+  }
+
+  function pickOnMap() {
+    // Clear search so the pick map is clean, switch to map, enter pick mode.
+    clearSearch();
+    setShowLocation(false);
+    setView("map");
+    setPickMode(true);
+  }
+
+  function onAnchorPicked(lat: number, lng: number) {
+    const a = { lat, lng };
+    setAnchor(a);
+    setAnchorLabel("Punto en el mapa");
+    try {
+      localStorage.setItem("dh_home_anchor", JSON.stringify(a));
+    } catch {}
+    setPickMode(false);
   }
 
   const runSearch = useCallback(
@@ -364,6 +386,11 @@ export default function HomeView({
           <SlidersHorizontal size={20} aria-hidden />
         </button>
         <span className="ml-auto truncate text-xs font-semibold text-ink-soft">
+          {anchorLabel && (
+            <span className="mr-2 rounded-full bg-accent px-2 py-0.5 text-white">
+              📍 {anchorLabel}
+            </span>
+          )}
           {[activeProvincia, activeMunicipio].filter(Boolean).join(" · ") || "Toda Cuba"}
         </span>
       </div>
@@ -377,6 +404,13 @@ export default function HomeView({
             className="btn btn-ghost w-full justify-center gap-2 rounded-md py-2 text-sm font-semibold"
           >
             <Crosshair size={16} aria-hidden /> {gpsBusy ? "Localizando…" : "Usar mi GPS"}
+          </button>
+          <button
+            type="button"
+            onClick={pickOnMap}
+            className="btn btn-ghost w-full justify-center gap-2 rounded-md py-2 text-sm font-semibold"
+          >
+            <MapPin size={16} aria-hidden /> Elegir punto en el mapa
           </button>
           <label className="relative block">
             <span className="px-1 text-xs text-ink-soft">Provincia</span>
@@ -564,8 +598,28 @@ export default function HomeView({
         ))}
 
       {/* --- BROWSE MODE (sin búsqueda) -------------------------------------- */}
-      {!searchMode && view === "map" && (
-        <AvailabilityMapDynamic rows={browseVisible} focusMunicipio={activeMunicipio} focusProvincia={activeProvincia} />
+      {view === "map" && !searchMode && (
+        <>
+          {pickMode && (
+            <div className="card-flat flex items-center justify-between gap-2 px-3 py-2 text-sm">
+              <span className="font-semibold">📍 Toca el mapa para elegir tu ubicación</span>
+              <button
+                type="button"
+                onClick={() => setPickMode(false)}
+                className="text-xs font-bold text-accent underline"
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
+          <AvailabilityMapDynamic
+            rows={browseVisible}
+            focusMunicipio={activeMunicipio}
+            focusProvincia={activeProvincia}
+            pickMode={pickMode}
+            onPick={onAnchorPicked}
+          />
+        </>
       )}
 
       {!searchMode && view === "list" && (
