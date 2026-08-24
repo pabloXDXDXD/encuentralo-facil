@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAvailability, getProductBySlug } from "@/lib/repo";
 import { formatPrice, queueLabel, timeAgo } from "@/lib/format";
+import { rowStampClass, rowStampLabel } from "@/lib/status";
 import { ProductIcon } from "@/lib/product-icons";
 
 export const dynamic = "force-dynamic";
@@ -72,11 +73,9 @@ export default async function ProductPage({ params }: Props) {
               </span>
             )}
             <span
-              className={`stamp text-sm ${
-                row.availability === "available" ? "stamp-hay -rotate-2" : "stamp-nohay rotate-2"
-              }`}
+              className={`stamp text-sm ${rowStampClass(row.status, row.availability)}`}
             >
-              {row.availability === "available" ? "Hay" : "No hay"}
+              {rowStampLabel(row.status, row.availability)}
             </span>
           </article>
         ))

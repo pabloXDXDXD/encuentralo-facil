@@ -215,3 +215,127 @@ from data d
 join public.stores s   on s.name = d.store_name
 join public.products p on p.slug = d.product_slug
 where not exists (select 1 from public.reports where device_hash = 'seed-demo');
+
+-- Bloque denso de un solo producto (pollo): muchos reportes del mismo item
+-- en muchas tiendas, para testear agregacion, ranking y ventanas de tiempo.
+-- Remove anytime: delete from reports where device_hash = 'seed-demo-pollo';
+with data(store_name, product_slug, avail, price, mins_ago) as (values
+  -- Pollo disponible en casi toda La Habana
+  ('Agropecuario Egido','pollo','available',410,8),
+  ('Mercado Comercial Obispo','pollo','available',450,14),
+  ('Bodega Cuarteles','pollo','available',395,21),
+  ('Panadería Compostela','pollo','available',480,35),
+  ('Agropecuario Calzada del Monte','pollo','available',420,12),
+  ('Caribe San Lázaro','pollo','available',405,27),
+  ('Bodega San Nicolás','pollo','available',390,44),
+  ('MIPYME El Ángel','pollo','available',520,18),
+  ('Agropecuario 19 y B','pollo','available',430,55),
+  ('Mercado La Rampa','pollo','available',510,31),
+  ('Bodega Calzada de Loma','pollo','available',400,62),
+  ('MIPYME El Vedadito','pollo','available',540,9),
+  ('Mercado Nuevo Vedado','pollo','out_of_stock',null::integer,70),
+  ('Bodega Rotonda','pollo','available',385,25),
+  ('Panadería Nuevo Vedado','pollo','available',495,48),
+  ('Agropecuario 5ta y 42','pollo','available',460,16),
+  ('Bodega Santa Catalina','pollo','available',392,38),
+  ('MIPYME El Trigal','pollo','available',505,22),
+  ('Agropecuario Dolores','pollo','available',415,29),
+  ('Bodega Acosta','pollo','available',398,51),
+  ('MIPYME Santos Market','pollo','available',530,13),
+  ('Mercado Jesús del Monte','pollo','out_of_stock',null::integer,88),
+  ('Bodega Luyanó','pollo','available',388,41),
+  ('MIPYME Buen Viaje','pollo','available',515,19),
+  ('Agropecuario Virgen del Camino','pollo','available',408,33),
+  ('Bodega Lacret','pollo','available',386,57),
+  ('Mercado San Miguel','pollo','available',472,26),
+  ('Mercado Pogolotti','pollo','available',455,37),
+  ('Bodega Calvario','pollo','available',391,66),
+  ('Agropecuario Buena Vista','pollo','available',412,24),
+  ('Agropecuario Marianao','pollo','available',418,17),
+  ('Mercado Puentes Grandes','pollo','available',468,42),
+  ('Bodega Marianao','pollo','available',394,53),
+  ('MIPYME El Bosque','pollo','available',525,11),
+  ('Mercado La Lisa','pollo','available',462,34),
+  ('Bodega Punta Brava','pollo','available',389,61),
+  ('Agropecuario Arroyo Arenas','pollo','available',414,20),
+  ('Agropecuario Santiago de las Vegas','pollo','available',407,46),
+  ('Mercado Wajay','pollo','available',458,28),
+  ('Bodega Calabazar','pollo','out_of_stock',null::integer,95),
+  ('TRD Panamericana','pollo','available',365,15),
+  ('Agropecuario Guanabo','pollo','available',380,39),
+  ('Bodega Cojímar','pollo','available',378,58),
+  ('Mercado Alamar','pollo','available',475,23),
+  ('Agropecuario Regla','pollo','available',402,30),
+  ('Bodega Guanabacoa','pollo','available',396,49),
+  ('Mercado Cotorro','pollo','available',409,36),
+  -- Sancti Spíritus también con pollo
+  ('Agropecuario Circunvalación','pollo','available',370,26),
+  ('Bodega Céspedes','pollo','available',385,43),
+  ('Mercado Municipal Trinidad','pollo','available',440,32),
+  ('MIPYME El Puente','pollo','available',495,18),
+  ('Caribe Jatibonico','pollo','out_of_stock',null::integer,77),
+  ('Mercado Yaguajay','pollo','available',410,54)
+)
+insert into public.reports (store_id, product_id, device_hash, availability, price_cup, created_at)
+select s.id, p.id, 'seed-demo-pollo', d.avail, d.price, now() - make_interval(mins => d.mins_ago)
+from data d
+join public.stores s   on s.name = d.store_name
+join public.products p on p.slug = d.product_slug
+where not exists (select 1 from public.reports where device_hash = 'seed-demo-pollo');
+
+-- ---------------------------------------------------------------------------
+-- Bulk de reportes concentrados para TESTEO de agregación:
+-- pocos productos (pollo, arroz, aceite, huevos), TODAS las tiendas,
+-- 3 reporteros distintos por (tienda, producto) con edades que pisan los
+-- límites de frescura (~8min -> fresh 1.0, ~35min -> 0.7, ~150min -> 0.4).
+-- Con 3 dispositivos por grupo score >= 2.1 -> siempre visible; sirve para
+-- probar price_from (min dentro de ventana), reporter_count y orden por
+-- frescura sin ruido de variedad.
+-- Idempotente: solo corre si no existe ningun reporte 'seed-load-%'.
+-- Remove anytime: delete from reports where device_hash like 'seed-load-%';
+-- ---------------------------------------------------------------------------
+with core(slug) as (values ('pollo'),('arroz'),('aceite'),('huevos')),
+pairs as (
+  select s.id as store_id,
+         c.slug,
+         row_number() over (order by s.id, c.slug) as rn
+  from public.stores s
+  cross join core c
+)
+insert into public.reports (store_id, product_id, device_hash, availability, price_cup, created_at)
+select pr.store_id,
+       p.id,
+       'seed-load-' || (((pr.rn + k.n) % 9))::text,
+       case when pr.rn % 11 = 0 then 'out_of_stock' else 'available' end,
+       case
+         when pr.rn % 11 = 0 then null::integer
+         when p.slug = 'pollo'  then 380 + (pr.rn % 5) * 10
+         when p.slug = 'arroz'  then 300 + (pr.rn % 4) * 15
+         when p.slug = 'aceite' then 1750 + (pr.rn % 3) * 50
+         else 160 + (pr.rn % 6) * 10   -- huevos
+       end,
+       now() - make_interval(mins => k.mins)
+from pairs pr
+join public.products p on p.slug = pr.slug
+cross join (values (0, 8), (1, 35), (2, 150)) as k(n, mins)
+where not exists (select 1 from public.reports where device_hash like 'seed-load-%');
+
+-- Bloque "habia": reportes viejos (2-4 dias) para probar el estado habia
+-- (mas de 24h pero dentro de la ventana de 7 dias).
+-- Remove anytime: delete from reports where device_hash = 'seed-demo-habia';
+with data(store_name, product_slug, avail, price, days_ago) as (values
+  ('Agropecuario Egido','aceite','available',1700,2),
+  ('Bodega Cuarteles','arroz','available',310,2),
+  ('Mercado La Rampa','pollo','out_of_stock',null::integer,3),
+  ('Bodega Rotonda','cafe','available',920,3),
+  ('MIPYME El Ángel','detergente','available',760,4),
+  ('Agropecuario Marianao','platano','available',55,4),
+  ('TRD Panamericana','leche-polvo','out_of_stock',null::integer,2),
+  ('Agropecuario Circunvalación','pollo','available',360,3)
+)
+insert into public.reports (store_id, product_id, device_hash, availability, price_cup, created_at)
+select s.id, p.id, 'seed-demo-habia', d.avail, d.price, now() - make_interval(days => d.days_ago)
+from data d
+join public.stores s   on s.name = d.store_name
+join public.products p on p.slug = d.product_slug
+where not exists (select 1 from public.reports where device_hash = 'seed-demo-habia');

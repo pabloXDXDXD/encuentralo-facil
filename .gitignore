@@ -37,3 +37,8 @@ playwright-report/
 
 # Playwright MCP artifacts
 .playwright-mcp/
+
+# Local test artifacts
+shot-*.png
+sizes.txt
+*.tsbuildinfo

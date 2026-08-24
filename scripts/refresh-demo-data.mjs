@@ -1,5 +1,6 @@
-// Refreshes demo reports: wipes device 'seed-demo' (stored literally by the
-// seed) and re-applies supabase/seed.sql so timestamps come out fresh.
+// Refreshes demo reports: wipes seeded demo devices ('seed-demo' + bulk test
+// reports 'seed-load-%') and re-applies supabase/seed.sql so timestamps come
+// out fresh.
 import { readFileSync } from "node:fs";
 import { Client } from "pg";
 import dotenv from "dotenv";
@@ -12,9 +13,10 @@ const client = new Client({
 });
 await client.connect();
 
-const del = await client.query("delete from public.reports where device_hash = $1", [
-  "seed-demo",
-]);
+const del = await client.query(
+  "delete from public.reports where device_hash = $1 or device_hash like $2",
+  ["seed-demo", "seed-load-%"],
+);
 console.log("old demo reports removed:", del.rowCount);
 
 const sql = readFileSync("supabase/seed.sql", "utf8");

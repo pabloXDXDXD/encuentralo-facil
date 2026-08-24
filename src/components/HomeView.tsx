@@ -3,10 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
 import {
   Basket,
-  CaretDown,
   Crosshair,
   Funnel,
   GlobeHemisphereWest,
@@ -22,6 +20,7 @@ import VoteButtons from "@/components/VoteButtons";
 import AvailabilityMap, { type MapPoint } from "@/components/AvailabilityMap";
 import { ProductIcon } from "@/lib/product-icons";
 import { MUNICIPIO_CENTERS } from "@/lib/geo";
+import { PRODUCT_CATALOG } from "@/lib/product-catalog";
 import { formatPrice, queueLabel, timeAgo } from "@/lib/format";
 
 const SAVED_KEY = "dh_saved_products";
@@ -61,7 +60,7 @@ type SearchRow = {
   lat: number;
   lng: number;
   distance_m: number;
-  status: "confirmed" | "uncertain" | "out" | "unknown";
+  status: "confirmed" | "stale" | "out" | "unknown";
   price_from: number | null;
   reporter_count: number;
   last_seen_at: string | null;
@@ -69,8 +68,6 @@ type SearchRow = {
 
 type Props = {
   rows: HomeRow[];
-  provinces: string[];
-  municipios: string[];
   activeProvincia: string | null;
   activeMunicipio: string | null;
   offline: boolean;
@@ -93,20 +90,23 @@ function writeSaved(list: string[]) {
   }
 }
 
-function locationHref(provincia: string | null, municipio: string | null): string {
-  const params = new URLSearchParams();
-  if (provincia) params.set("provincia", provincia);
-  if (municipio) params.set("municipio", municipio);
-  const qs = params.toString();
-  return qs ? `/?${qs}` : "/";
-}
-
 const RADIUS_OPTIONS = [
   { value: 1500, label: "≤1.5 km" },
   { value: 3000, label: "≤3 km" },
   { value: 6000, label: "≤6 km" },
-  { value: 20000, label: "Toda la zona" },
+  { value: 10000, label: "≤10 km" },
 ];
+
+// Relative time renders after mount only: computing it during SSR and again
+// on hydration makes server and client disagree whenever the clock crosses a
+// minute/hour boundary between both passes.
+function RelativeTime({ date }: { date: string | Date }) {
+  const [text, setText] = useState("");
+  useEffect(() => {
+    setText(timeAgo(date));
+  }, [date]);
+  return <>{text}</>;
+}
 
 function fmtDist(m: number): string {
   return m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`;
@@ -114,13 +114,10 @@ function fmtDist(m: number): string {
 
 export default function HomeView({
   rows,
-  provinces,
-  municipios,
   activeProvincia,
   activeMunicipio,
   offline,
 }: Props) {
-  const router = useRouter();
   const [rowsState, setRowsState] = useState<HomeRow[]>(rows);
   const [saved, setSaved] = useState<string[]>([]);
   const [filterOn, setFilterOn] = useState(false);
@@ -129,7 +126,6 @@ export default function HomeView({
   const [showLocation, setShowLocation] = useState(false);
   const [showViewPanel, setShowViewPanel] = useState(false);
   const [pickMode, setPickMode] = useState(false);
-  const [anchorLabel, setAnchorLabel] = useState<string | null>(null);
 
   // --- Search state ---------------------------------------------------------
   const [qInput, setQInput] = useState("");
@@ -138,10 +134,14 @@ export default function HomeView({
   const [searching, setSearching] = useState(false);
   const [anchor, setAnchor] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsBusy, setGpsBusy] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [gpsSupported, setGpsSupported] = useState(true);
   const [radius, setRadius] = useState(6000);
   const [confirmedOnly, setConfirmedOnly] = useState(false);
   const [maxPriceInput, setMaxPriceInput] = useState("");
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Panel de sugerencias visible hasta que el usuario lo cierra (Esc o click fuera).
+  const [suggestsOpen, setSuggestsOpen] = useState(true);
+  const suggestBarRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setSaved(readSaved());
@@ -151,18 +151,9 @@ export default function HomeView({
       if (pref === "map" || pref === "list") setView(pref);
       const savedAnchor = localStorage.getItem("dh_home_anchor");
       if (savedAnchor) setAnchor(JSON.parse(savedAnchor));
+      setGpsSupported(Boolean(navigator.geolocation));
     } catch {
       /* ignore */
-    }
-    if (!activeProvincia && !activeMunicipio) {
-      try {
-        const last = JSON.parse(
-          localStorage.getItem("dh_last_location") ?? "null",
-        ) as { p: string | null; m: string | null } | null;
-        if (last && (last.p || last.m)) router.replace(locationHref(last.p, last.m));
-      } catch {
-        /* ignore */
-      }
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -174,16 +165,6 @@ export default function HomeView({
     }
   }, [view]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        "dh_last_location",
-        JSON.stringify({ p: activeProvincia, m: activeMunicipio }),
-      );
-    } catch {
-      /* ignore */
-    }
-  }, [activeProvincia, activeMunicipio]);
 
   // Parent refetches rows after a location change — adopt them wholesale.
   useEffect(() => {
@@ -194,10 +175,6 @@ export default function HomeView({
     const next = saved.includes(slug) ? saved.filter((s) => s !== slug) : [...saved, slug];
     setSaved(next);
     writeSaved(next);
-  }
-
-  function changeLocation(nextProvincia: string | null, nextMunicipio: string | null) {
-    router.push(locationHref(nextProvincia, nextMunicipio));
   }
 
   /** Resolve the search anchor: saved GPS/pick > municipality centroid > region. */
@@ -213,22 +190,41 @@ export default function HomeView({
   }
 
   function useGps() {
-    if (!navigator.geolocation) return;
+    if (!gpsSupported) {
+      setGpsError("Tu navegador no permite geolocalización. Elige un punto en el mapa.");
+      return;
+    }
     setGpsBusy(true);
+    setGpsError(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const a = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setAnchor(a);
-        setAnchorLabel("GPS");
         try {
           localStorage.setItem("dh_home_anchor", JSON.stringify(a));
         } catch {}
         setGpsBusy(false);
       },
-      () => setGpsBusy(false),
-      { timeout: 8000 },
+      (err) => {
+        setGpsBusy(false);
+        setGpsError(
+          err.code === err.PERMISSION_DENIED
+            ? "Permiso de ubicación denegado. Actívalo en tu navegador o elige un punto en el mapa."
+            : err.code === err.POSITION_UNAVAILABLE
+              ? "No pudimos obtener tu ubicación. Activa el permiso de ubicación o elige un punto en el mapa."
+              : "Tardamos demasiado en ubicarte. Intenta de nuevo o elige un punto en el mapa.",
+        );
+      },
+      { timeout: 8000, enableHighAccuracy: true },
     );
   }
+
+  // El aviso de GPS se despacha solo a los ~6s (o antes si hay exito/otro intento).
+  useEffect(() => {
+    if (!gpsError) return;
+    const t = setTimeout(() => setGpsError(null), 6000);
+    return () => clearTimeout(t);
+  }, [gpsError]);
 
   function pickOnMap() {
     // Clear search so the pick map is clean, switch to map, enter pick mode.
@@ -241,7 +237,6 @@ export default function HomeView({
   function onAnchorPicked(lat: number, lng: number) {
     const a = { lat, lng };
     setAnchor(a);
-    setAnchorLabel("Punto en el mapa");
     try {
       localStorage.setItem("dh_home_anchor", JSON.stringify(a));
     } catch {}
@@ -274,23 +269,40 @@ export default function HomeView({
     [anchor, radius, confirmedOnly, maxPriceInput, activeMunicipio],
   );
 
+  // Re-run the committed search when radius, confirmed-only or the anchor
+  // change (maxPrice re-runs on blur/Enter already).
+  const searchInputs = `${radius}|${confirmedOnly ? 1 : 0}|${
+    anchor ? `${anchor.lat.toFixed(5)},${anchor.lng.toFixed(5)}` : ""
+  }`;
+  useEffect(() => {
+    if (!activeQuery) return;
+    void runSearch(activeQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInputs]);
+
   function onSearchInput(value: string) {
+    // Mientras se escribe solo se muestran sugerencias; la busqueda real
+    // se lanza al elegir una sugerencia o pulsar Enter sobre una seleccion.
     setQInput(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      const q = value.trim();
-      setActiveQuery(q);
-      if (q.length >= 2) void runSearch(q);
-      else setResults(null);
-    }, 450);
+    setSuggestsOpen(true);
   }
 
   function clearSearch() {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
     setQInput("");
     setActiveQuery("");
     setResults(null);
   }
+
+  // Click fuera de la barra de busqueda cierra el panel de sugerencias.
+  useEffect(() => {
+    function onDocMouseDown(e: MouseEvent) {
+      if (suggestBarRef.current && !suggestBarRef.current.contains(e.target as Node)) {
+        setSuggestsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, []);
 
   const filtering = filterOn && saved.length > 0;
 
@@ -313,6 +325,51 @@ export default function HomeView({
 
   const searchMode = activeQuery.length >= 2;
 
+  // Todavia no se ha lanzado ninguna busqueda real: tras fijar la ubicacion el
+  // usuario ve SOLO el buscador y una tarjeta de estado vacio — nada de datos
+  // browse ni mapa con pines hasta que busque. Al limpiar la busqueda se vuelve
+  // a este estado vacio.
+  const hasSearched = searchMode || results !== null;
+
+  // La ubicacion es prerrequisito: sin ancla no se busca (se hidrata desde
+  // localStorage en el effect de arriba; `loaded` evita el flash inicial).
+  const needsAnchor = loaded && !anchor && !pickMode;
+
+  // Sugerencias de productos en tiempo real (typeahead). Combina el catalogo
+  // estatico (funciona offline) con conteos de tiendas del snapshot.
+  const productSuggestions = useMemo(() => {
+    const q = qInput.trim().toLowerCase();
+    if (q.length < 2) return [];
+    const counts = new Map<string, number>();
+    for (const r of rowsState) {
+      if (!r.product_name.toLowerCase().includes(q) && !r.product_slug.includes(q)) continue;
+      counts.set(r.product_slug, (counts.get(r.product_slug) ?? 0) + 1);
+    }
+    const matches: { slug: string; name: string; emoji: string; n: number }[] = [];
+    for (const c of PRODUCT_CATALOG) {
+      if (!c.name.toLowerCase().includes(q) && !c.slug.includes(q)) continue;
+      matches.push({ ...c, n: counts.get(c.slug) ?? 0 });
+    }
+    // productos del snapshot que no estan en el catalogo estatico
+    for (const [slug, n] of counts) {
+      if (!matches.some((m) => m.slug === slug)) {
+        const row = rowsState.find((r) => r.product_slug === slug);
+        if (row) matches.push({ slug, name: row.product_name, emoji: row.emoji, n });
+      }
+    }
+    return matches.sort((a, b) => b.n - a.n).slice(0, 6);
+  }, [qInput, rowsState]);
+
+  const [justPicked, setJustPicked] = useState(false);
+
+  function selectSuggestion(slug: string, name: string) {
+    setQInput(name);
+    setActiveQuery(name);
+    setResults(null);
+    setJustPicked(true);
+    void runSearch(name);
+  }
+
   // --- Derived map inputs ----------------------------------------------------
   const searchPoints: MapPoint[] = useMemo(() => {
     if (!results) return [];
@@ -331,16 +388,108 @@ export default function HomeView({
     }));
   }, [results]);
 
+  // --- Onboarding gate --------------------------------------------------------
+  // La ubicacion es prerrequisito: un usuario nuevo ve UNICAMENTE la tarjeta
+  // de bienvenida (sin buscador, sin paneles y sin vistas browse).
+  // resolveAnchor() solo fabrica un ancla al buscar; hasta que el usuario no
+  // guarda una (GPS o mapa), `anchor` permanece null y la puerta sigue activa.
+  if (needsAnchor) {
+    return (
+      <div className="flex min-h-[70dvh] items-center justify-center py-10">
+        <div className="card-ticket w-full max-w-sm p-6 text-center">
+          <p className="font-display text-lg">📍 Elige tu punto de búsqueda</p>
+          <p className="mt-1 text-sm text-ink-soft">
+            Necesitamos tu ubicación para mostrarte qué hay cerca. Sin cuenta, sin datos personales.
+          </p>
+          <div className="mt-4 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={useGps}
+              disabled={gpsBusy || !gpsSupported}
+              title={gpsSupported ? undefined : "Tu navegador no permite geolocalización"}
+              className="btn btn-primary justify-center rounded-md py-3"
+            >
+              <Crosshair size={18} aria-hidden />
+              {gpsBusy ? "Buscando GPS…" : "Usar mi GPS"}
+            </button>
+            {gpsError && (
+              <div
+                role="alert"
+                className="flex items-start justify-between gap-2 rounded-md border-2 border-dashed border-line bg-card px-3 py-2 text-left text-xs text-ink-soft"
+              >
+                <span>{gpsError}</span>
+                <button
+                  type="button"
+                  onClick={() => setGpsError(null)}
+                  aria-label="Cerrar aviso"
+                  className="shrink-0 font-bold text-ink"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                clearSearch();
+                setView("map");
+                setPickMode(true);
+              }}
+              className="btn btn-ghost justify-center rounded-md py-3"
+            >
+              <MapPin size={18} aria-hidden />
+              Elegir punto en el mapa
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Modo elegir punto en el mapa: SOLO el mapa con una barra minima de
+  // instruccion. Al cancelar se vuelve a la puerta si aun no hay ancla.
+  if (pickMode) {
+    return (
+      <div className="space-y-3">
+        <div className="card-flat flex items-center justify-between gap-2 px-3 py-2 text-sm">
+          <span className="font-semibold">📍 Toca el mapa para elegir tu ubicación</span>
+          <button
+            type="button"
+            onClick={() => setPickMode(false)}
+            className="text-xs font-bold text-accent underline"
+          >
+            Cancelar
+          </button>
+        </div>
+        <AvailabilityMapDynamic
+          focusMunicipio={activeMunicipio}
+          focusProvincia={activeProvincia}
+          pickMode
+          onPick={onAnchorPicked}
+          anchor={anchor}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* --- Sticky search bar --------------------------------------------- */}
-      <div className="sticky top-[52px] z-30 -mx-4 px-4 pb-1 pt-1">
-        <div className="card-ticket flex items-center gap-2 px-3 py-2">
+      <div ref={suggestBarRef} className="sticky top-0 z-30 -mx-4 bg-paper px-4 pb-1 pt-2">
+        <div className={`card-ticket flex items-center gap-2 px-3 py-2 ${!anchor ? "opacity-60" : ""}`}>
           <MagnifyingGlass size={18} className="shrink-0 text-ink-soft" aria-hidden />
           <input
             value={qInput}
-            onChange={(e) => onSearchInput(e.target.value)}
-            placeholder="Buscar producto… (ej. pollo)"
+        onChange={(e) => {
+          setJustPicked(false);
+          anchor && onSearchInput(e.target.value);
+        }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setSuggestsOpen(false);
+              if (e.key === "Enter" && activeQuery) void runSearch(activeQuery);
+            }}
+            disabled={!anchor}
+            placeholder={anchor ? "Buscar producto… (ej. pollo)" : "Primero elige tu ubicación 📍"}
             className="w-full bg-transparent text-sm outline-none"
             inputMode="search"
             aria-label="Buscar producto"
@@ -351,6 +500,27 @@ export default function HomeView({
             </button>
           )}
         </div>
+
+        {/* Sugerencias en tiempo real (typeahead) */}
+        {anchor && suggestsOpen && !justPicked && productSuggestions.length > 0 && qInput.trim() !== activeQuery && (
+          <div className="card-ticket mt-1 divide-y divide-line overflow-hidden py-0">
+            {productSuggestions.map((s) => (
+              <button
+                key={s.slug}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault(); // no perder el foco del input
+                  selectSuggestion(s.slug, s.name);
+                }}
+                className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-paper"
+              >
+                <span className="text-lg" aria-hidden>{s.emoji}</span>
+                <span className="flex-1 truncate font-semibold">{s.name}</span>
+                <span className="text-xs text-ink-soft">{s.n} {s.n === 1 ? "tienda" : "tiendas"}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* --- Compact control bar ------------------------------------------- */}
@@ -386,11 +556,6 @@ export default function HomeView({
           <SlidersHorizontal size={20} aria-hidden />
         </button>
         <span className="ml-auto truncate text-xs font-semibold text-ink-soft">
-          {anchorLabel && (
-            <span className="mr-2 rounded-full bg-accent px-2 py-0.5 text-white">
-              📍 {anchorLabel}
-            </span>
-          )}
           {[activeProvincia, activeMunicipio].filter(Boolean).join(" · ") || "Toda Cuba"}
         </span>
       </div>
@@ -400,11 +565,28 @@ export default function HomeView({
           <button
             type="button"
             onClick={useGps}
-            disabled={gpsBusy}
+            disabled={gpsBusy || !gpsSupported}
+            title={gpsSupported ? undefined : "Tu navegador no permite geolocalización"}
             className="btn btn-ghost w-full justify-center gap-2 rounded-md py-2 text-sm font-semibold"
           >
             <Crosshair size={16} aria-hidden /> {gpsBusy ? "Localizando…" : "Usar mi GPS"}
           </button>
+          {gpsError && (
+            <div
+              role="alert"
+              className="flex items-start justify-between gap-2 rounded-md border-2 border-dashed border-line bg-card px-3 py-2 text-xs text-ink-soft"
+            >
+              <span>{gpsError}</span>
+              <button
+                type="button"
+                onClick={() => setGpsError(null)}
+                aria-label="Cerrar aviso"
+                className="shrink-0 font-bold text-ink"
+              >
+                ✕
+              </button>
+            </div>
+          )}
           <button
             type="button"
             onClick={pickOnMap}
@@ -412,55 +594,6 @@ export default function HomeView({
           >
             <MapPin size={16} aria-hidden /> Elegir punto en el mapa
           </button>
-          <label className="relative block">
-            <span className="px-1 text-xs text-ink-soft">Provincia</span>
-            <select
-              value={activeProvincia ?? ""}
-              onChange={(e) => {
-                changeLocation(e.target.value || null, null);
-                setShowLocation(false);
-              }}
-              className={`mt-1 ${selectClass}`}
-            >
-              <option value="">Toda Cuba</option>
-              {provinces.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-            <CaretDown
-              aria-hidden
-              size={14}
-              className="pointer-events-none absolute bottom-3 right-3 text-ink-soft"
-            />
-          </label>
-          <label className="relative block">
-            <span className="px-1 text-xs text-ink-soft">
-              {activeProvincia && activeProvincia !== "La Habana" ? "Ciudad" : "Municipio"}
-            </span>
-            <select
-              value={activeMunicipio ?? ""}
-              onChange={(e) => {
-                changeLocation(activeProvincia, e.target.value || null);
-                setShowLocation(false);
-              }}
-              className={`mt-1 ${selectClass}`}
-              disabled={municipios.length === 0}
-            >
-              <option value="">Todo el territorio</option>
-              {municipios.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-            <CaretDown
-              aria-hidden
-              size={14}
-              className="pointer-events-none absolute bottom-3 right-3 text-ink-soft"
-            />
-          </label>
         </div>
       )}
 
@@ -494,6 +627,30 @@ export default function HomeView({
         </div>
       )}
 
+      {/* --- Selected-product banner (search mode) --------------------------- */}
+      {searchMode && (
+        <div className="card-flat flex items-center gap-3 px-3 py-2">
+          <ProductIcon slug={results?.[0]?.product_slug ?? ""} size={26} className="shrink-0 text-ink" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-semibold leading-snug">{activeQuery}</p>
+            <p className="text-xs text-ink-soft">
+              {searching
+                ? "Buscando…"
+                : `${results?.length ?? 0} ${results?.length === 1 ? "resultado" : "resultados"}`}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={clearSearch}
+            aria-label="Quitar búsqueda"
+            title="Quitar búsqueda"
+            className="text-sm font-bold text-ink-soft hover:text-ink"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* --- Filters (search mode only) ------------------------------------- */}
       {searchMode && (
         <div className="flex flex-wrap items-center gap-2">
@@ -518,7 +675,7 @@ export default function HomeView({
               confirmedOnly ? "bg-accent text-on-accent" : "btn-ghost"
             }`}
           >
-            ✅ Solo confirmados
+            Solo confirmados
           </button>
           <input
             value={maxPriceInput}
@@ -540,10 +697,29 @@ export default function HomeView({
         </div>
       )}
 
-      {/* --- SEARCH RESULTS -------------------------------------------------- */}
-      {searchMode &&
+      {/* --- Estado vacio pre-busqueda -------------------------------------- */}
+      {!hasSearched && (
+        <div className="card-ticket p-6 text-center" style={{ "--i": 0 } as React.CSSProperties}>
+          <Basket aria-hidden size={44} className="mx-auto text-ink-soft" weight="duotone" />
+          <p className="mt-2 font-display text-xl">¿Qué buscas hoy?</p>
+          <p className="mx-auto mt-1 max-w-xs text-sm text-ink-soft">
+            Busca un producto para ver qué hay cerca.
+          </p>
+          <p className="mt-2 text-xs text-ink-soft">Prueba con «pollo», «café» o «arroz»…</p>
+        </div>
+      )}
+
+      {hasSearched && (
+        <>
+          {/* --- SEARCH RESULTS -------------------------------------------------- */}
+          {searchMode &&
         (view === "map" ? (
-          <AvailabilityMapDynamic points={searchPoints} focusProvincia={activeProvincia} />
+          <AvailabilityMapDynamic
+            points={searchPoints}
+            focusProvincia={activeProvincia}
+            anchor={anchor}
+            radiusMeters={radius}
+          />
         ) : (
           <section className="space-y-2">
             {searching && (
@@ -563,9 +739,7 @@ export default function HomeView({
                 <span className="w-14 shrink-0 text-center text-xs font-bold text-ink-soft">
                   {fmtDist(r.distance_m)}
                 </span>
-                {r.product_slug && (
-                  <ProductIcon slug={r.product_slug} size={26} className="shrink-0 text-ink" />
-                )}
+                <ProductIcon slug={r.product_slug || ""} size={26} className="shrink-0 text-ink" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold">{r.product_name}</p>
                   <p className="truncate text-xs text-ink-soft">{r.store_name}</p>
@@ -579,18 +753,18 @@ export default function HomeView({
                   className={`stamp text-xs ${
                     r.status === "confirmed"
                       ? "stamp-hay -rotate-2"
-                      : r.status === "uncertain"
+                      : r.status === "stale"
                         ? "stamp-hay rotate-1 opacity-80"
                         : "stamp-nohay rotate-2"
                   }`}
                 >
                   {r.status === "confirmed"
                     ? "Hay"
-                    : r.status === "uncertain"
-                      ? "Quizás"
+                    : r.status === "stale"
+                      ? "Había"
                       : r.status === "out"
-                        ? "No hay"
-                        : "?"}
+                        ? "Ya no hay"
+                        : "Sin datos"}
                 </span>
               </article>
             ))}
@@ -599,27 +773,14 @@ export default function HomeView({
 
       {/* --- BROWSE MODE (sin búsqueda) -------------------------------------- */}
       {view === "map" && !searchMode && (
-        <>
-          {pickMode && (
-            <div className="card-flat flex items-center justify-between gap-2 px-3 py-2 text-sm">
-              <span className="font-semibold">📍 Toca el mapa para elegir tu ubicación</span>
-              <button
-                type="button"
-                onClick={() => setPickMode(false)}
-                className="text-xs font-bold text-accent underline"
-              >
-                Cancelar
-              </button>
-            </div>
-          )}
-          <AvailabilityMapDynamic
-            rows={browseVisible}
-            focusMunicipio={activeMunicipio}
-            focusProvincia={activeProvincia}
-            pickMode={pickMode}
-            onPick={onAnchorPicked}
-          />
-        </>
+        <AvailabilityMapDynamic
+          rows={browseVisible}
+          focusMunicipio={activeMunicipio}
+          focusProvincia={activeProvincia}
+          pickMode={pickMode}
+          onPick={onAnchorPicked}
+          anchor={anchor}
+        />
       )}
 
       {!searchMode && view === "list" && (
@@ -647,7 +808,7 @@ export default function HomeView({
               <p className="mx-auto mt-1 max-w-xs text-sm text-ink-soft">
                 {filtering && saved.length === 0
                   ? "Toca la estrella de un producto para seguirlo."
-                  : "Los reportes duran 6 horas visibles. Sé quien encienda la zona."}
+                  : "Lo reportado pasa a «había» tras 24 horas. Sé quien encienda la zona."}
               </p>
             </div>
           )}
@@ -672,6 +833,8 @@ export default function HomeView({
           ))}
         </>
       )}
+          </>
+        )}
 
       {/* --- FAB Reportar ---------------------------------------------------- */}
       <Link
@@ -686,8 +849,6 @@ export default function HomeView({
   );
 }
 
-const selectClass =
-  "w-full appearance-none rounded-md border-2 border-ink bg-card px-3 py-2 pr-8 text-sm font-semibold";
 
 type RowProps = {
   row: HomeRow;
@@ -732,7 +893,7 @@ function TicketRow({ row, index, saved, onToggleSave }: RowProps) {
           </p>
           <p className="truncate text-xs text-ink-soft">{row.store_name}</p>
           <p className="mt-0.5 text-xs text-ink-soft">
-            {timeAgo(row.last_seen_at)}
+            <RelativeTime date={row.last_seen_at} />
             {row.reporter_count > 1 && ` · ✓ ${row.reporter_count}`}
             {row.queue_level && (
               <span className="ml-1 font-semibold text-ink">{queueLabel(row.queue_level)}</span>

@@ -36,7 +36,7 @@ export default function RootLayout({
     <html lang="es">
       <body className="min-h-dvh bg-paper text-ink">
         <ServiceWorkerRegister />
-        <header className="sticky top-0 z-40 border-b-2 border-ink bg-ink text-paper">
+        <header className="border-b-2 border-ink bg-ink text-paper">
           <div className="mx-auto flex max-w-xl items-center justify-between px-4 py-2.5">
             <Link href="/" className="flex items-center gap-2" aria-label="DóndeHay inicio">
               <span aria-hidden className="inline-block h-3 w-3 rotate-45 bg-accent" />
@@ -51,7 +51,7 @@ export default function RootLayout({
         </header>
         <main className="mx-auto max-w-xl px-4 pb-24 pt-4">{children}</main>
         <footer className="border-t-2 border-dashed border-line py-6 text-center text-xs text-ink-soft">
-          Hecho por y para el barrio · los reportes caducan a las 6 horas
+          Hecho por y para el barrio · lo reportado pasa a «había» tras 24 horas
         </footer>
         <PendingChip />
       </body>

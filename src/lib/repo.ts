@@ -18,6 +18,8 @@ export type AvailabilityRow = {
   queue_level: number | null;
   lat: number | string | null;
   lng: number | string | null;
+  /** hay | ya_no_hay | habia (modelo temporal de 24h) */
+  status?: string | null;
 };
 
 type RawAvailabilityRow = Omit<AvailabilityRow, "reporter_count"> & {

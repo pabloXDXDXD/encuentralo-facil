@@ -191,24 +191,32 @@ a:focus-visible {
 }
 
 .map-pin--strong {
-  background: var(--hay-bg);
+  background: #a5d6a7; /* hay: verde claro */
+  border-color: #2e7d32;
 }
 
 .map-pin--weak {
-  background: #fdf3d7; /* single unconfirmed report */
+  background: #ffe082; /* single unconfirmed report */
+  border-color: #b26a00;
 }
 
 /* Search-result states */
 .map-pin--confirmed {
-  background: var(--hay-bg);
+  background: #a5d6a7; /* hay */
+  border-color: #2e7d32;
+  color: #1b4d1e;
 }
 
 .map-pin--uncertain {
-  background: #fdf3d7;
+  background: #ffe082; /* habia / sin confirmar */
+  border-color: #b26a00;
+  color: #6b4300;
 }
 
 .map-pin--out {
-  background: #e3ded4; /* reported agotado -> muted gray */
+  background: #ef9a9a; /* ya no hay -> rojo suave pero claro */
+  border-color: #c62828;
+  color: #7f1616;
 }
 
 .map-pin--unknown {
@@ -221,6 +229,46 @@ a:focus-visible {
   background: var(--accent);
   color: #fff;
   border-color: var(--ink);
+}
+
+/* Cluster badge (leaflet.markercluster): muestra el total y el estado
+   dominante de sus puntos, con la misma paleta que los pines. */
+.map-cluster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--card);
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1;
+  box-shadow: 2px 2px 0 0 var(--stamp);
+}
+
+.map-cluster--confirmed {
+  background: #a5d6a7; /* hay */
+  border-color: #2e7d32;
+  color: #1b4d1e;
+}
+
+.map-cluster--stale {
+  background: #ffe082; /* habia / sin confirmar */
+  border-color: #b26a00;
+  color: #6b4300;
+}
+
+.map-cluster--out {
+  background: #ef9a9a; /* ya no hay */
+  border-color: #c62828;
+  color: #7f1616;
+}
+
+.map-cluster--unknown {
+  border-style: dashed;
+  opacity: 0.7;
 }
 
 .map-picking,

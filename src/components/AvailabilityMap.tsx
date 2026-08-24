@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import type { Map as LeafletMap } from "leaflet";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Crosshair, MapPin } from "@phosphor-icons/react";
@@ -25,6 +27,10 @@ type Props = {
   /** When true: next map click sets the user's home anchor. */
   pickMode?: boolean;
   onPick?: (lat: number, lng: number) => void;
+  /** Persisted user anchor -> drawn on every mount/paint so it survives mode switches. */
+  anchor?: { lat: number; lng: number } | null;
+  /** Active search radius in meters; drives how far out the camera frames. */
+  radiusMeters?: number;
 };
 
 export type HomeRowLike = {
@@ -41,6 +47,7 @@ export type HomeRowLike = {
   queue_level?: number | null;
   lat: number | null;
   lng: number | null;
+  status?: string | null;
 };
 
 export type MapPoint = {
@@ -51,7 +58,7 @@ export type MapPoint = {
   product_name: string;
   store_name: string;
   barrio: string;
-  status: "confirmed" | "uncertain" | "out" | "unknown";
+  status: "confirmed" | "stale" | "out" | "unknown";
   price_from: number | null;
   reporter_count: number;
   last_seen_at: string | null;
@@ -59,23 +66,27 @@ export type MapPoint = {
 
 const STATUS_CLASS: Record<MapPoint["status"], string> = {
   confirmed: "map-pin--confirmed",
-  uncertain: "map-pin--uncertain",
+  stale: "map-pin--uncertain",
   out: "map-pin--out",
   unknown: "map-pin--unknown",
 };
 
 const STATUS_BADGE: Record<MapPoint["status"], string> = {
-  confirmed: "Hay · confirmado",
-  uncertain: "Había · sin confirmar",
-  out: "Reportado agotado",
-  unknown: "Sin reportes recientes",
+  confirmed: "Hay",
+  stale: "Había",
+  out: "Ya no hay",
+  unknown: "Sin datos",
 };
+
+/** Orden canonico de los estados; un grupo de clusters por cada uno. */
+const STATUS_ORDER: MapPoint["status"][] = ["confirmed", "stale", "out", "unknown"];
 
 type InternalPoint = {
   key: string;
   lat: number;
   lng: number;
   cls: string;
+  statusKey: MapPoint["status"];
   glyphSlug: string;
   productName: string;
   storeName: string;
@@ -87,6 +98,18 @@ type InternalPoint = {
 };
 
 const glyphCache = new Map<string, string>();
+
+/** Zoom maximo del mapa; a este nivel el clustering se desactiva por completo. */
+const MAP_MAX_ZOOM = 17;
+
+/**
+ * Zoom del encuadre segun el radio de busqueda activo: un radio corto
+ * mira de cerca, uno largo se aleja para dar contexto de la zona.
+ */
+const ZOOM_BY_RADIUS: Record<number, number> = { 1500: 16, 3000: 15, 6000: 14, 10000: 13 };
+const DEFAULT_RADIUS_ZOOM = 15;
+const radiusZoom = (m?: number) =>
+  (m != null ? ZOOM_BY_RADIUS[m] : undefined) ?? DEFAULT_RADIUS_ZOOM;
 
 function productGlyph(slug: string): string {
   let html = glyphCache.get(slug);
@@ -104,12 +127,40 @@ export default function AvailabilityMap({
   focusProvincia,
   pickMode,
   onPick,
+  anchor,
+  radiusMeters,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const frameRef = useRef<(() => void) | null>(null);
   const anchorMarkerRef = useRef<any>(null);
+  const markerLayerRef = useRef<any>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  // La instancia del mapa vive en estado a proposito: al recrear el mapa
+  // (cambio de provincia/municipio) setStatus("ready") seria un no-op y el
+  // efecto de pintado no se reejecutaria, dejando el mapa nuevo vacio.
+  const [mapInstance, setMapInstance] = useState<LeafletMap | null>(null);
+
+  /** Crea o mueve el marcador de anclaje del usuario en el mapa actual. */
+  function upsertAnchor(L: any, map: LeafletMap, lat: number, lng: number, draggable: boolean) {
+    if (anchorMarkerRef.current) {
+      anchorMarkerRef.current.setLatLng([lat, lng]);
+      return;
+    }
+    const glyph = renderToStaticMarkup(<MapPin weight="fill" size={16} />);
+    const icon = L.divIcon({
+      className: "",
+      html: `<div class="map-pin map-pin--anchor">${glyph}</div>`,
+      iconSize: [32, 32],
+      iconAnchor: [16, 28],
+    });
+    const marker = L.marker([lat, lng], { icon, draggable }).addTo(map);
+    marker.on("dragend", () => {
+      const p = marker.getLatLng();
+      onPick?.(p.lat, p.lng);
+    });
+    anchorMarkerRef.current = marker;
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -125,7 +176,7 @@ export default function AvailabilityMap({
           center: mc ? [mc.lat, mc.lng] : region.center,
           zoom: mc ? 14 : region.minZoom + 1,
           minZoom: region.minZoom,
-          maxZoom: 17,
+          maxZoom: MAP_MAX_ZOOM,
           zoomControl: false,
           attributionControl: false,
           maxBounds: L.latLngBounds(region.bounds).pad(0.08),
@@ -135,6 +186,7 @@ export default function AvailabilityMap({
         L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
 
         mapRef.current = map;
+        setMapInstance(map);
         setStatus("ready");
       } catch {
         if (!cancelled) setStatus("error");
@@ -145,35 +197,47 @@ export default function AvailabilityMap({
     return () => {
       cancelled = true;
       frameRef.current = null;
+      anchorMarkerRef.current = null;
+      markerLayerRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
+      setMapInstance(null);
     };
   }, [focusProvincia, focusMunicipio]);
 
   useEffect(() => {
-    if (status !== "ready") return;
+    if (status !== "ready" || !mapInstance) return;
     const map = mapRef.current;
-    if (!map) return;
+    // map !== mapInstance: mapa recien recreado cuyo arranque aun no termina.
+    if (!map || map !== mapInstance) return;
 
     let cancelled = false;
 
     async function paint() {
       const L = (await import("leaflet")).default;
+      await import("leaflet.markercluster");
       if (cancelled || !map) return;
 
       map.eachLayer((layer) => {
-        if ("_url" in layer) return;
-        map.removeLayer(layer);
+        if ("_url" in layer) return; // tiles
+        // preservar el ancla del usuario entre repintados (ej. al buscar)
+        if (anchorMarkerRef.current && layer === anchorMarkerRef.current) return;
+        map.removeLayer(layer); // incluye el grupo de clusters anterior
       });
 
       let internal: InternalPoint[] = [];
 
       if (points) {
-        internal = points.map((p) => ({
+        // Coordenadas invalidas rompen L.marker y abortan todo el repintado
+        // (pines Y encuadre): se excluyen igual que en el modo browse.
+        internal = points
+          .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+          .map((p) => ({
           key: p.store_id + p.slug + p.status,
           lat: p.lat,
           lng: p.lng,
           cls: STATUS_CLASS[p.status],
+          statusKey: p.status,
           glyphSlug: p.slug,
           productName: p.product_name,
           storeName: p.store_name,
@@ -186,14 +250,24 @@ export default function AvailabilityMap({
       } else {
         const browseRows = rows ?? [];
         for (const r of browseRows) {
-          if (r.lat === null || r.lng === null || r.availability !== "available") continue;
-          const ageMin = (Date.now() - new Date(r.last_seen_at).getTime()) / 60_000;
-          const strong = r.reporter_count >= 2 || ageMin <= 30;
+          // Sin coordenadas no hay nada que dibujar: se excluyen de la vista.
+          if (r.lat === null || r.lng === null) continue;
+          // Browse muestra TODOS los estados: el estado del ultimo reporte
+          // decide la clase del pin (Hay / Habia / Ya no hay / Sin datos).
+          const st: MapPoint["status"] =
+            r.availability === "available"
+              ? "confirmed"
+              : r.status === "habia"
+                ? "stale"
+                : r.status === "ya_no_hay"
+                  ? "out"
+                  : "unknown";
           internal.push({
             key: r.store_id + r.product_slug,
             lat: Number(r.lat),
             lng: Number(r.lng),
-            cls: strong ? "map-pin--confirmed" : "map-pin--uncertain",
+            cls: STATUS_CLASS[st],
+            statusKey: st,
             glyphSlug: r.product_slug,
             productName: r.product_name,
             storeName: r.store_name,
@@ -201,12 +275,40 @@ export default function AvailabilityMap({
             priceFrom: r.price_from,
             reporterCount: r.reporter_count,
             lastSeenAt: r.last_seen_at,
-            badge: strong ? "Confirmado" : "Fresco",
+            badge: STATUS_BADGE[st],
           });
         }
       }
 
-      for (const p of internal) {
+      // --- Marcadores con leaflet.markercluster ------------------------------
+      // UN grupo de clusters por ESTADO: un cluster nunca mezcla colores/
+      // estados; cada estado se agrupa (y colorea) por separado.
+      // Los grupos se RECREAN en cada repintado: reciclarlos con clearLayers()
+      // pierde marcadores cuando hay animaciones/transiciones en vuelo.
+      const statusGroups = new Map<MapPoint["status"], any>();
+      for (const st of STATUS_ORDER) {
+        const group = L.markerClusterGroup({
+          disableClusteringAtZoom: MAP_MAX_ZOOM,
+          showCoverageOnHover: false,
+          spiderfyOnMaxZoom: true,
+          maxClusterRadius: 56,
+          // Sin animaciones: los estados intermedios de la animacion eran la
+          // fuente de marcadores perdidos/fantasma al repintar seguido.
+          animate: false,
+          iconCreateFunction: (cluster) =>
+            L.divIcon({
+              className: "",
+              html: `<div class="map-cluster map-cluster--${st}">${cluster.getChildCount()}</div>`,
+              iconSize: [36, 36],
+              iconAnchor: [18, 18],
+            }),
+        });
+        map.addLayer(group);
+        statusGroups.set(st, group);
+      }
+      markerLayerRef.current = statusGroups.get("confirmed");
+
+      const addPin = (p: InternalPoint) => {
         const icon = L.divIcon({
           className: "",
           html: `<div class="map-pin ${p.cls}" title="${p.badge}">${productGlyph(p.glyphSlug)}</div>`,
@@ -230,25 +332,57 @@ export default function AvailabilityMap({
             <div class="popup-meta">${p.storeName}<br/>${p.barrio} · ${meta}</div>
           </div>`;
 
-        L.marker([p.lat, p.lng], { icon })
-          .bindPopup(html)
-          .addTo(map);
+        const marker = L.marker([p.lat, p.lng], {
+          icon,
+          status: p.statusKey,
+        } as L.MarkerOptions);
+        marker.bindPopup(html).addTo(statusGroups.get(p.statusKey));
+      };
+
+      for (const p of internal) addPin(p);
+
+      // Dibujar el ancla persistida del usuario (prop) en cada repintado,
+      // para que sobreviva al cambio browse <-> busqueda (instancias distintas).
+      if (anchor) {
+        upsertAnchor(L, map, anchor.lat, anchor.lng, Boolean(pickMode));
       }
 
       // --- Framing ---------------------------------------------------------
+      // La camara pertenece al USUARIO: en busqueda se centra en su punto con
+      // el zoom que dicta el radio elegido, no en los resultados.
       const frame = () => {
         const mc = focusMunicipio ? MUNICIPIO_CENTERS[focusMunicipio] : undefined;
         if (mc && !points) {
-          map.setView([mc.lat, mc.lng], 14);
+          map.setView([mc.lat, mc.lng], 14, { animate: false });
           return;
+        }
+        if (points) {
+          const c = anchor ?? (internal.length > 0 ? internal[0] : undefined);
+          if (c) {
+            if (radiusMeters) {
+              // Centrar en el usuario y garantizar que TODO el radio elegido
+              // quepa en pantalla (cualquier viewport): fitBounds sobre la
+              // caja de radio, no un zoom fijo.
+              const dLat = radiusMeters / 111320;
+              const dLng = radiusMeters / (111320 * Math.cos((c.lat * Math.PI) / 180));
+              const b = L.latLngBounds(
+                [c.lat - dLat, c.lng - dLng],
+                [c.lat + dLat, c.lng + dLng],
+              );
+              map.fitBounds(b.pad(0.05), { maxZoom: MAP_MAX_ZOOM - 1, animate: false });
+            } else {
+              map.setView([c.lat, c.lng], DEFAULT_RADIUS_ZOOM, { animate: false });
+            }
+            return;
+          }
         }
         if (internal.length > 0) {
           const b = L.latLngBounds([]);
           for (const p of internal) b.extend([p.lat, p.lng]);
-          map.fitBounds(b.pad(0.25), { maxZoom: 16 });
+          map.fitBounds(b.pad(0.25), { maxZoom: radiusZoom(radiusMeters), animate: false });
         } else {
           const region = regionFor(focusProvincia);
-          map.setView(region.center, region.minZoom + 2);
+          map.setView(region.center, region.minZoom + 2, { animate: false });
         }
       };
       frameRef.current = frame;
@@ -259,7 +393,7 @@ export default function AvailabilityMap({
     return () => {
       cancelled = true;
     };
-  }, [rows, points, status, focusMunicipio, focusProvincia]);
+  }, [rows, points, status, focusMunicipio, focusProvincia, anchor, mapInstance]);
 
   // Pick mode: next click on the map becomes the user's home anchor.
   useEffect(() => {
@@ -276,22 +410,7 @@ export default function AvailabilityMap({
       if (cancelled || !map) return;
 
       const place = (lat: number, lng: number) => {
-        const glyph = renderToStaticMarkup(<MapPin weight="fill" size={16} />);
-        const icon = L.divIcon({
-          className: "",
-          html: `<div class="map-pin map-pin--anchor">${glyph}</div>`,
-          iconSize: [32, 32],
-          iconAnchor: [16, 28],
-        });
-        if (anchorMarkerRef.current) {
-          anchorMarkerRef.current.setLatLng([lat, lng]);
-        } else {
-          anchorMarkerRef.current = L.marker([lat, lng], { icon, draggable: true }).addTo(map);
-          anchorMarkerRef.current.on("dragend", () => {
-            const p = anchorMarkerRef.current.getLatLng();
-            onPick?.(p.lat, p.lng);
-          });
-        }
+        upsertAnchor(L, map, lat, lng, true);
         onPick?.(lat, lng);
         map.setView([lat, lng], Math.max(map.getZoom(), 14));
       };
@@ -311,7 +430,7 @@ export default function AvailabilityMap({
   }, [status, pickMode, onPick]);
 
   return (
-    <div className="card-ticket overflow-hidden">
+    <div className="card-ticket isolate overflow-hidden">
       <div className="relative">
         <div
           ref={containerRef}
@@ -319,38 +438,41 @@ export default function AvailabilityMap({
           role="application"
           aria-label="Mapa de disponibilidad"
         />
-        <button
-          type="button"
-          onClick={() => frameRef.current?.()}
-          aria-label="Centrar en los resultados"
-          title="Centrar en los resultados"
-          className="btn btn-ghost absolute right-3 top-3 z-[500] h-10 w-10 justify-center rounded-md !p-0"
-        >
-          <Crosshair size={20} weight="bold" aria-hidden />
-        </button>
+        {!pickMode && (
+          <button
+            type="button"
+            onClick={() => frameRef.current?.()}
+            aria-label="Centrar en los resultados"
+            title="Centrar en los resultados"
+            className="btn btn-ghost absolute right-3 top-3 z-[500] h-10 w-10 justify-center rounded-md !p-0"
+          >
+            <Crosshair size={20} weight="bold" aria-hidden />
+          </button>
+        )}
       </div>
 
-      {/* Legend doubles as required attribution for OSM tiles */}
+      {/* Legend doubles as required attribution for OSM tiles.
+          In pick mode the map must stay clean: attribution only. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t-2 border-dashed border-line px-3 py-2 text-xs text-ink-soft">
-        <span className="flex items-center gap-1.5">
-          <span aria-hidden className={`map-pin map-pin--confirmed`} style={{ width: 18, height: 18, fontSize: 10 }}>
-            ✚
-          </span>
-          Hay · confirmado
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span aria-hidden className={`map-pin map-pin--uncertain`} style={{ width: 18, height: 18, fontSize: 10 }}>
-            ?
-          </span>
-          Había · sin confirmar
-        </span>
-        {points && (
+        {!pickMode && (
           <>
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden className={`map-pin map-pin--confirmed`} style={{ width: 18, height: 18, fontSize: 10 }}>
+                ✚
+              </span>
+              Hay
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden className={`map-pin map-pin--uncertain`} style={{ width: 18, height: 18, fontSize: 10 }}>
+                ?
+              </span>
+              Había (&gt;1 día)
+            </span>
             <span className="flex items-center gap-1.5">
               <span aria-hidden className="map-pin map-pin--out" style={{ width: 18, height: 18, fontSize: 10 }}>
                 ✕
               </span>
-              Agotado
+              Ya no hay
             </span>
             <span className="flex items-center gap-1.5">
               <span aria-hidden className="map-pin map-pin--unknown" style={{ width: 18, height: 18, fontSize: 10 }} />
