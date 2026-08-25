@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import EmptyTicket from "@/components/EmptyTicket";
 import { getStoreAvailability, getStoreById } from "@/lib/repo";
 import { formatPrice, kindLabel, queueLabel, timeAgo } from "@/lib/format";
 import { rowStampClass, rowStampLabel } from "@/lib/status";
@@ -40,9 +41,7 @@ export default async function StorePage({ params }: Props) {
       </header>
 
       {rows.length === 0 ? (
-        <div className="card-ticket p-6 text-center text-sm text-ink-soft">
-          Sin reportes activos para esta tienda.
-        </div>
+        <EmptyTicket stamp="Sin reportes">Sin reportes activos para esta tienda.</EmptyTicket>
       ) : (
         rows.map((row, i) => (
           <article
@@ -60,7 +59,7 @@ export default async function StorePage({ params }: Props) {
               <p className="text-xs text-ink-soft">{timeAgo(row.last_seen_at)}</p>
             </div>
             {row.availability === "available" && row.price_from !== null && (
-              <span className="font-display text-lg text-hay-ink">
+              <span className="font-display text-xl text-ink">
                 {formatPrice(row.price_from)}
               </span>
             )}

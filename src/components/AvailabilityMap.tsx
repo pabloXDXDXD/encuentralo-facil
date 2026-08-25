@@ -6,10 +6,11 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import type { Map as LeafletMap } from "leaflet";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Crosshair, MapPin, Storefront } from "@phosphor-icons/react";
+import { Check, Crosshair, MapPin, Plus, Question, Storefront, X } from "@phosphor-icons/react";
 import { MUNICIPIO_CENTERS, regionFor } from "@/lib/geo";
 import { ProductIcon } from "@/lib/product-icons";
 import { timeAgo } from "@/lib/format";
+import { quickMarkReport } from "@/lib/quick-mark";
 
 /**
  * OpenStreetMap view.
@@ -31,6 +32,11 @@ type Props = {
   anchor?: { lat: number; lng: number } | null;
   /** Active search radius in meters; drives how far out the camera frames. */
   radiusMeters?: number;
+  /**
+   * Vista de pais (modo "elegir punto" del Home): ignora el foco de
+   * provincia/municipio y abre la camara encuadrando Cuba completa.
+   */
+  countryView?: boolean;
   /**
    * Plain tappable store markers (report-flow store picker). No clusters,
    * no availability popups: clicking a pin calls onStorePinSelect.
@@ -127,6 +133,9 @@ const glyphCache = new Map<string, string>();
 /** Zoom maximo del mapa; a este nivel el clustering se desactiva por completo. */
 const MAP_MAX_ZOOM = 17;
 
+/** Zoom minimo en vista de pais (elegir punto): permite encuadrar Cuba entera. */
+const COUNTRY_MIN_ZOOM = 5;
+
 /**
  * Zoom del encuadre segun el radio de busqueda activo: un radio corto
  * mira de cerca, uno largo se aleja para dar contexto de la zona.
@@ -155,6 +164,74 @@ function reportLinkGlyph(): string {
   return html;
 }
 
+/** Glifos inline para las acciones de marcado rapido del popup. */
+function markYesGlyph(): string {
+  let html = glyphCache.get("__mark_yes__");
+  if (html === undefined) {
+    html = renderToStaticMarkup(<Check size={12} weight="bold" />);
+    glyphCache.set("__mark_yes__", html);
+  }
+  return html;
+}
+
+function markNoGlyph(): string {
+  let html = glyphCache.get("__mark_no__");
+  if (html === undefined) {
+    html = renderToStaticMarkup(<X size={12} weight="bold" />);
+    glyphCache.set("__mark_no__", html);
+  }
+  return html;
+}
+
+/** Escapa datos de la base (nombres definidos por usuarios) para atributos HTML. */
+function escAttr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// Marcado rapido en curso por tienda+producto: ignora toques repetidos
+// aunque el popup se haya cerrado y reabierto durante el envio.
+const busyMarks = new Set<string>();
+
+async function handlePopupMark(btn: HTMLElement) {
+  const d = btn.dataset;
+  const key = `${d.storeId}:${d.productSlug}`;
+  if (!d.storeId || !d.productSlug || !d.status || busyMarks.has(key)) return;
+  busyMarks.add(key);
+
+  // Deshabilitar ambos botones del popup mientras vuela el envio.
+  const marksEl = btn.closest(".popup-marks");
+  marksEl?.querySelectorAll<HTMLButtonElement>(".popup-mark").forEach((b) => {
+    b.disabled = true;
+  });
+
+  const res = await quickMarkReport({
+    storeId: d.storeId,
+    storeName: d.storeName ?? "",
+    productSlug: d.productSlug,
+    productName: d.productName ?? "",
+    availability: d.status === "out_of_stock" ? "out_of_stock" : "available",
+  });
+
+  // El popup pudo cerrarse (btn desconectado): solo tocar el DOM si sigue vivo.
+  if (marksEl && btn.isConnected) {
+    marksEl.innerHTML = res.ok
+      ? '<span class="stamp stamp--flat stamp-hay popup-mark-done">Reportado ✓</span>'
+      : `<span class="popup-mark-error">${escAttr(res.error)}</span>`;
+  }
+  busyMarks.delete(key);
+}
+
+/** Delegacion de clicks: un solo listener en el contenedor del mapa. */
+function onPopupClick(e: MouseEvent) {
+  const target = e.target as HTMLElement | null;
+  const btn = target?.closest?.(".popup-mark");
+  if (btn instanceof HTMLElement) void handlePopupMark(btn);
+}
+
 export default function AvailabilityMap({
   rows,
   points,
@@ -164,6 +241,7 @@ export default function AvailabilityMap({
   onPick,
   anchor,
   radiusMeters,
+  countryView,
   storePins,
   onStorePinSelect,
   popupReportLink,
@@ -209,25 +287,35 @@ export default function AvailabilityMap({
     async function boot() {
       try {
         const L = (await import("leaflet")).default;
-        const region = regionFor(focusProvincia);
+        // Vista de pais: sin foco de provincia (regionFor(null) = Cuba).
+        const region = regionFor(countryView ? null : focusProvincia);
         if (cancelled || !containerRef.current) return;
 
-        const mc = focusMunicipio ? MUNICIPIO_CENTERS[focusMunicipio] : undefined;
+        const mc =
+          !countryView && focusMunicipio
+            ? MUNICIPIO_CENTERS[focusMunicipio]
+            : undefined;
         const map = L.map(containerRef.current, {
           center: mc ? [mc.lat, mc.lng] : region.center,
-          zoom: mc ? 14 : region.minZoom + 1,
-          minZoom: region.minZoom,
+          zoom: mc ? 14 : countryView ? COUNTRY_MIN_ZOOM + 1 : region.minZoom + 1,
+          minZoom: countryView ? COUNTRY_MIN_ZOOM : region.minZoom,
           maxZoom: MAP_MAX_ZOOM,
           zoomControl: false,
-          attributionControl: false,
+          attributionControl: true,
           maxBounds: L.latLngBounds(region.bounds).pad(0.08),
           maxBoundsViscosity: 0.9,
         });
 
-        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        }).addTo(map);
 
         mapRef.current = map;
         setMapInstance(map);
+        // Los popups de Leaflet viven dentro del contenedor del mapa: un solo
+        // listener delegado aqui cubre los botones .popup-mark de todos.
+        containerRef.current.addEventListener("click", onPopupClick);
         setStatus("ready");
       } catch {
         if (!cancelled) setStatus("error");
@@ -241,6 +329,7 @@ export default function AvailabilityMap({
       anchorMarkerRef.current = null;
       markerLayerRef.current = null;
       userPickedRef.current = false;
+      containerRef.current?.removeEventListener("click", onPopupClick);
       mapRef.current?.remove();
       mapRef.current = null;
       setMapInstance(null);
@@ -408,11 +497,20 @@ export default function AvailabilityMap({
           const reportLink = popupReportLink
             ? `<a class="popup-report" href="/reportar?store=${p.storeId}">${reportLinkGlyph()}<span>Reportar aquí</span></a>`
             : "";
+          // Marcado rapido: dos acciones que crean un reporte NUEVO sin salir
+          // del popup (delegacion de clicks via onPopupClick).
+          const yesLabel = p.statusKey === "out" ? "Hay de nuevo" : "Aún hay";
+          const marks = `
+              <div class="popup-marks">
+                <button type="button" class="popup-mark popup-mark--yes" data-store-id="${p.storeId}" data-product-slug="${escAttr(p.glyphSlug)}" data-store-name="${escAttr(p.storeName)}" data-product-name="${escAttr(p.productName)}" data-status="available" aria-label="Reportar que ${p.statusKey === "out" ? "hay de nuevo" : "aún hay"} ${escAttr(p.productName)} en ${escAttr(p.storeName)}">${markYesGlyph()}<span>${yesLabel}</span></button>
+                <button type="button" class="popup-mark popup-mark--no" data-store-id="${p.storeId}" data-product-slug="${escAttr(p.glyphSlug)}" data-store-name="${escAttr(p.storeName)}" data-product-name="${escAttr(p.productName)}" data-status="out_of_stock" aria-label="Reportar que ya no hay ${escAttr(p.productName)} en ${escAttr(p.storeName)}">${markNoGlyph()}<span>Ya no hay</span></button>
+              </div>`;
           const html = `
             <div class="popup-ticket">
-              <div class="popup-name"><span>${p.productName}</span><span class="stamp ${STATUS_STAMP[p.statusKey]}" style="transform:none;font-size:10px;padding:0 4px;">${p.badge}</span></div>
+              <div class="popup-name"><span>${p.productName}</span><span class="stamp ${STATUS_STAMP[p.statusKey]} stamp--flat" style="font-size:10px;padding:0 4px;">${p.badge}</span></div>
               ${price}
               <div class="popup-meta">${p.storeName}<br/>${p.barrio} · ${meta}</div>
+              ${marks}
               ${reportLink}
             </div>`;
 
@@ -439,6 +537,14 @@ export default function AvailabilityMap({
         // Tras un pick manual la camara NUNCA se mueve sola: re-encuadrar al
         // cambiar el anchor prop descenta el mapa justo cuando el usuario eligio.
         if (userPickedRef.current) return;
+        // Vista de pais (elegir punto): encuadrar Cuba completa, sin focos locales.
+        if (countryView) {
+          map.fitBounds(L.latLngBounds(regionFor(null).bounds).pad(0.08), {
+            maxZoom: MAP_MAX_ZOOM - 1,
+            animate: false,
+          });
+          return;
+        }
         // Store-picker: camera belongs to the user's anchor so nearby stores
         // are in view; without one, frame the store pins.
         if (storePins) {
@@ -555,37 +661,35 @@ export default function AvailabilityMap({
         )}
       </div>
 
-      {/* Legend doubles as required attribution for OSM tiles.
-          In pick mode the map must stay clean: attribution only. */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t-2 border-dashed border-line px-3 py-2 text-xs text-ink-soft">
-        {!pickMode && (
-          <>
-            <span className="flex items-center gap-1.5">
-              <span aria-hidden className={`map-pin map-pin--confirmed`} style={{ width: 18, height: 18, fontSize: 10 }}>
-                ✚
-              </span>
-              Hay (&lt;24h)
+      {/* Leyenda de estados. El credito OSM obligatorio vive en el control de
+          atribucion del mapa (centrado al fondo); en modo elegir el mapa se
+          mantiene limpio: solo atribucion. */}
+      {!pickMode && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t-2 border-dashed border-line px-3 py-2 text-xs text-ink-soft">
+          <span className="flex items-center gap-1.5">
+            <span aria-hidden className="map-pin map-pin--confirmed" style={{ width: 18, height: 18 }}>
+              <Plus size={10} weight="bold" />
             </span>
-            <span className="flex items-center gap-1.5">
-              <span aria-hidden className={`map-pin map-pin--uncertain`} style={{ width: 18, height: 18, fontSize: 10 }}>
-                ?
-              </span>
-              Hay (no seguro)
+            Hay (&lt;24h)
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span aria-hidden className="map-pin map-pin--uncertain" style={{ width: 18, height: 18 }}>
+              <Question size={10} weight="bold" />
             </span>
-            <span className="flex items-center gap-1.5">
-              <span aria-hidden className="map-pin map-pin--out" style={{ width: 18, height: 18, fontSize: 10 }}>
-                ✕
-              </span>
-              Ya no hay
+            Hay (no seguro)
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span aria-hidden className="map-pin map-pin--out" style={{ width: 18, height: 18 }}>
+              <X size={10} weight="bold" />
             </span>
-            <span className="flex items-center gap-1.5">
-              <span aria-hidden className="map-pin map-pin--unknown" style={{ width: 18, height: 18, fontSize: 10 }} />
-              Sin datos
-            </span>
-          </>
-        )}
-        <span className="ml-auto">© OpenStreetMap contributors</span>
-      </div>
+            Ya no hay
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span aria-hidden className="map-pin map-pin--unknown" style={{ width: 18, height: 18, fontSize: 10 }} />
+            Sin datos
+          </span>
+        </div>
+      )}
     </div>
   );
 }

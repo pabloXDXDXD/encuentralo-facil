@@ -73,7 +73,7 @@ export default function VoteButtons({ reportId }: Props) {
 
   if (voted) {
     return (
-      <span className="stamp stamp-hay text-xs normal-case" style={{ transform: "none" }}>
+      <span className="stamp stamp--flat stamp-hay text-xs normal-case">
         ✓ Gracias
       </span>
     );

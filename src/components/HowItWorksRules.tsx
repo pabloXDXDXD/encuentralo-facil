@@ -42,7 +42,7 @@ export default function HowItWorksRules() {
               <Icon size={20} weight="duotone" className="text-accent" />
             </span>
             <div>
-              <p className="font-display tracking-wide">{title}</p>
+              <p className="font-display text-lg leading-tight tracking-wide">{title}</p>
               <p className="mt-1 text-sm text-ink-soft">{body}</p>
             </div>
           </div>

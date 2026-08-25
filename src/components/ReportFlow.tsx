@@ -11,11 +11,13 @@ import {
   MapPin,
   MapTrifold,
   Package,
+  Spinner,
   Star,
   Tray,
   Warning,
   X,
 } from "@phosphor-icons/react";
+import Notice from "@/components/Notice";
 import { outboxAdd } from "@/lib/outbox";
 import { getDeviceId } from "@/lib/client-device";
 import { ProductIcon } from "@/lib/product-icons";
@@ -459,7 +461,9 @@ export default function ReportFlow({ barrios, provincia, initialProduct, initial
         {status.offline ? (
           <Tray aria-hidden size={44} className="mx-auto text-accent" weight="duotone" />
         ) : (
-          <CheckCircle aria-hidden size={44} className="mx-auto text-hay-ink" weight="fill" />
+          <p className="stamp-land my-1">
+            <span className="stamp stamp-hay px-3 py-1 text-xl">Reportado</span>
+          </p>
         )}
         <p className="mt-2 font-display text-xl">
           {status.offline ? "Guardado sin conexión" : "¡Reporte enviado!"}
@@ -646,10 +650,7 @@ export default function ReportFlow({ barrios, provincia, initialProduct, initial
             </label>
 
             {dupWarning && (
-              <div
-                role="alert"
-                className="space-y-2 rounded-md border-2 border-accent bg-card p-3"
-              >
+              <Notice variant="warning" className="space-y-2">
                 <p className="flex items-start gap-2 text-sm font-semibold">
                   <Warning size={16} weight="fill" className="mt-0.5 shrink-0 text-accent" aria-hidden />
                   ¿Ya existe «{dupWarning.storeName}» muy cerca de ese punto?
@@ -671,7 +672,7 @@ export default function ReportFlow({ barrios, provincia, initialProduct, initial
                     Es este mismo
                   </button>
                 </div>
-              </div>
+              </Notice>
             )}
 
             <div className="flex gap-2">
@@ -681,6 +682,9 @@ export default function ReportFlow({ barrios, provincia, initialProduct, initial
                 onClick={() => createSuggestedStore(false)}
                 className="btn btn-primary flex-1 rounded-md py-3 disabled:opacity-60"
               >
+                {sugSending && (
+                  <Spinner weight="bold" className="animate-spin" size={16} aria-hidden />
+                )}
                 {sugSending ? "Creando…" : "Crear punto"}
               </button>
               <button
@@ -709,7 +713,7 @@ export default function ReportFlow({ barrios, provincia, initialProduct, initial
   // --- Flow A: report a product -------------------------------------------------
   return (
     <div className="space-y-4">
-      <ol className="flex items-center gap-2 px-1 font-display text-sm tracking-wide text-line">
+      <ol className="flex items-center gap-2 px-1 font-display text-sm tracking-wide text-ink-soft">
         <li className={step === "product" ? "text-accent" : ""}>1 · Producto</li>
         <li>›</li>
         <li className={step === "store" ? "text-accent" : ""}>2 · Tienda</li>
@@ -729,14 +733,18 @@ export default function ReportFlow({ barrios, provincia, initialProduct, initial
       )}
 
       {error && (
-        <p className="card-flat px-3 py-3 text-sm font-semibold text-nohay-ink">{error}</p>
+        <Notice variant="error" className="font-semibold">
+          {error}
+        </Notice>
       )}
 
       {createdNote && (
-        <p className="flex items-center gap-2 rounded-md border-2 border-hay-ink bg-hay-bg px-3 py-2 text-sm font-semibold text-hay-ink">
-          <CheckCircle size={16} weight="fill" aria-hidden />
-          Punto creado. Ahora reporta qué hay ahí.
-        </p>
+        <Notice variant="success" className="font-semibold">
+          <span className="flex items-center gap-2">
+            <CheckCircle size={16} weight="fill" aria-hidden />
+            Punto creado. Ahora reporta qué hay ahí.
+          </span>
+        </Notice>
       )}
 
       {step === "product" && (
@@ -844,7 +852,7 @@ export default function ReportFlow({ barrios, provincia, initialProduct, initial
           ) : (
             <>
               {store && (
-                <div className="flex items-center gap-2 rounded-md border-2 border-accent bg-card px-3 py-2 text-sm">
+                <div className="card-flat flex items-center gap-2 rounded-md px-3 py-2 text-sm">
                   <MapPin size={16} weight="fill" className="shrink-0 text-accent" aria-hidden />
                   <span className="min-w-0 flex-1 truncate font-semibold">{store.storeName}</span>
                   <button
@@ -879,7 +887,7 @@ export default function ReportFlow({ barrios, provincia, initialProduct, initial
                 })}
               </ul>
               {creatingStore ? (
-                <div className="space-y-2 rounded-md border-2 border-accent bg-card p-3">
+                <div className="card-flat space-y-2 rounded-md p-3">
                   <input
                     value={newStoreName}
                     onChange={(e) => setNewStoreName(e.target.value)}
@@ -935,10 +943,7 @@ export default function ReportFlow({ barrios, provincia, initialProduct, initial
           </div>
 
           {latest?.found && latest.reportId && (
-            <div
-              role="alert"
-              className="space-y-2 rounded-md border-2 border-accent bg-card p-3 text-sm"
-            >
+            <Notice variant="warning" className="space-y-2">
               <p className="flex items-start gap-2 font-semibold">
                 <Warning size={16} weight="fill" className="mt-0.5 shrink-0 text-accent" aria-hidden />
                 Reportaron {product.name} aquí hace{" "}
@@ -956,7 +961,7 @@ export default function ReportFlow({ barrios, provincia, initialProduct, initial
                 <CheckCircle size={16} aria-hidden />
                 Confirmar el reporte existente
               </button>
-            </div>
+            </Notice>
           )}
 
           {stats && (
@@ -1016,7 +1021,7 @@ export default function ReportFlow({ barrios, provincia, initialProduct, initial
                       onClick={() => setQueue(queue === n ? null : n)}
                       className={`rounded-md border-2 p-2 text-center text-xs font-semibold ${
                         queue === n
-                          ? "border-accent bg-card text-accent shadow-[3px_3px_0_0_var(--stamp)]"
+                          ? "border-ink bg-ink text-paper"
                           : "border-line bg-card text-ink-soft"
                       }`}
                     >
@@ -1047,6 +1052,9 @@ export default function ReportFlow({ barrios, provincia, initialProduct, initial
               onClick={submit}
               className="btn btn-primary flex-1 rounded-md py-3 disabled:opacity-60"
             >
+              {status.kind === "sending" && (
+                <Spinner weight="bold" className="animate-spin" size={16} aria-hidden />
+              )}
               {status.kind === "sending" ? "Enviando…" : "Enviar reporte"}
             </button>
             <button

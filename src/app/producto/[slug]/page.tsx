@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import EmptyTicket from "@/components/EmptyTicket";
 import { getAvailability, getProductBySlug } from "@/lib/repo";
 import { formatPrice, queueLabel, timeAgo } from "@/lib/format";
 import { rowStampClass, rowStampLabel } from "@/lib/status";
@@ -29,6 +30,9 @@ export default async function ProductPage({ params }: Props) {
 
   const all = await getAvailability(null);
   const rows = all.filter((r) => r.product_slug === slug);
+  const priced = rows.filter((r) => r.availability === "available" && r.price_from !== null);
+  const best = priced.length > 0 ? Math.min(...priced.map((r) => r.price_from ?? Infinity)) : null;
+  const bestRow = best !== null ? priced.find((r) => r.price_from === best) : undefined;
 
   return (
     <div className="space-y-3">
@@ -46,9 +50,9 @@ export default async function ProductPage({ params }: Props) {
       </header>
 
       {rows.length === 0 ? (
-        <div className="card-ticket p-6 text-center text-sm text-ink-soft">
+        <EmptyTicket stamp="Sin reportes">
           Nadie ha reportado este producto recientemente.
-        </div>
+        </EmptyTicket>
       ) : (
         rows.map((row, i) => (
           <article
@@ -68,7 +72,7 @@ export default async function ProductPage({ params }: Props) {
               </p>
             </div>
             {row.availability === "available" && row.price_from !== null && (
-              <span className="font-display text-xl text-hay-ink">
+              <span className="font-display text-xl text-ink">
                 {formatPrice(row.price_from)}
               </span>
             )}
@@ -79,6 +83,23 @@ export default async function ProductPage({ params }: Props) {
             </span>
           </article>
         ))
+      )}
+
+      {best !== null && bestRow && (
+        <>
+          <div aria-hidden className="border-t-2 border-dashed border-line" />
+          <div className="flex items-end justify-between px-1">
+            <span className="text-left">
+              <span className="block font-display text-sm tracking-wide text-ink-soft">
+                Mejor precio
+              </span>
+              <span className="text-xs text-ink-soft">en {bestRow.store_name}</span>
+            </span>
+            <span className="font-display text-2xl leading-none text-ink">
+              {formatPrice(best)}
+            </span>
+          </div>
+        </>
       )}
 
       <Link href="/reportar" className="btn btn-primary w-full rounded-md py-3 text-center">

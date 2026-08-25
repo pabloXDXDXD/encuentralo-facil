@@ -31,6 +31,16 @@
   --nohay-bg: #fbe3e0;
   --nohay-ink: #991b1b;
   --stamp: #1b1813;
+  /* Status pin palette (shared by pins, clusters, stamps, filter chips) */
+  --pin-hay-bg: #a5d6a7;
+  --pin-hay-border: #2e7d32;
+  --pin-hay-ink: #1b4d1e;
+  --pin-stale-bg: #ffe082;
+  --pin-stale-border: #b26a00;
+  --pin-stale-ink: #6b4300;
+  --pin-out-bg: #ef9a9a;
+  --pin-out-border: #c62828;
+  --pin-out-ink: #7f1616;
   color-scheme: light;
 }
 
@@ -48,6 +58,15 @@
   --color-hay-ink: var(--hay-ink);
   --color-nohay-bg: var(--nohay-bg);
   --color-nohay-ink: var(--nohay-ink);
+  --color-pin-hay-bg: var(--pin-hay-bg);
+  --color-pin-hay-border: var(--pin-hay-border);
+  --color-pin-hay-ink: var(--pin-hay-ink);
+  --color-pin-stale-bg: var(--pin-stale-bg);
+  --color-pin-stale-border: var(--pin-stale-border);
+  --color-pin-stale-ink: var(--pin-stale-ink);
+  --color-pin-out-bg: var(--pin-out-bg);
+  --color-pin-out-border: var(--pin-out-border);
+  --color-pin-out-ink: var(--pin-out-ink);
 }
 
 html {
@@ -98,11 +117,16 @@ body {
   display: inline-block;
   border: 2px solid currentColor;
   padding: 0.05rem 0.5rem;
-  font-family: var(--font-anton), sans-serif;
+  font-family: "Anton", "Arial Narrow", Impact, sans-serif;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   transform: rotate(-1.5deg);
   line-height: 1.4;
+}
+
+/* Flat variant: no tilt (vote chips, map popup stamps). */
+.stamp--flat {
+  transform: none;
 }
 
 .stamp-hay {
@@ -112,8 +136,8 @@ body {
 
 /* "Hay (no seguro)": ambar, mismo color del pin uncertain */
 .stamp-stale {
-  background: #ffe082;
-  color: #6b4300;
+  background: var(--pin-stale-bg);
+  color: var(--pin-stale-ink);
 }
 
 /* "Sin datos": neutro punteado, mismo color del pin unknown */
@@ -188,6 +212,45 @@ a:focus-visible {
   animation-delay: calc(var(--i, 0) * 45ms);
 }
 
+/* --- Stamp landing (report success) -----------------------------------------
+   The stamp slams down onto the paper and settles tilted. */
+@keyframes stamp-land {
+  0% {
+    opacity: 0;
+    transform: scale(1.6) rotate(-14deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(0.94) rotate(-7deg);
+  }
+  80% {
+    transform: scale(1.04) rotate(-9deg);
+  }
+  100% {
+    transform: scale(1) rotate(-8deg);
+  }
+}
+
+.stamp-land {
+  animation: stamp-land 0.45s cubic-bezier(0.2, 0.85, 0.3, 1.1) 0.15s both;
+}
+
+/* Decorative receipt barcode (pure CSS, no image). */
+.barcode {
+  height: 26px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--ink) 0 2px,
+    transparent 2px 4px,
+    var(--ink) 4px 7px,
+    transparent 7px 8px,
+    var(--ink) 8px 9px,
+    transparent 9px 13px,
+    var(--ink) 13px 15px,
+    transparent 15px 18px
+  );
+}
+
 /* --- Map pins & popups ------------------------------------------------------ */
 .map-pin {
   display: flex;
@@ -204,32 +267,32 @@ a:focus-visible {
 }
 
 .map-pin--strong {
-  background: #a5d6a7; /* hay: verde claro */
-  border-color: #2e7d32;
+  background: var(--pin-hay-bg); /* hay: verde claro */
+  border-color: var(--pin-hay-border);
 }
 
 .map-pin--weak {
-  background: #ffe082; /* single unconfirmed report */
-  border-color: #b26a00;
+  background: var(--pin-stale-bg); /* single unconfirmed report */
+  border-color: var(--pin-stale-border);
 }
 
 /* Search-result states */
 .map-pin--confirmed {
-  background: #a5d6a7; /* hay */
-  border-color: #2e7d32;
-  color: #1b4d1e;
+  background: var(--pin-hay-bg); /* hay */
+  border-color: var(--pin-hay-border);
+  color: var(--pin-hay-ink);
 }
 
 .map-pin--uncertain {
-  background: #ffe082; /* habia / sin confirmar */
-  border-color: #b26a00;
-  color: #6b4300;
+  background: var(--pin-stale-bg); /* habia / sin confirmar */
+  border-color: var(--pin-stale-border);
+  color: var(--pin-stale-ink);
 }
 
 .map-pin--out {
-  background: #ef9a9a; /* ya no hay -> rojo suave pero claro */
-  border-color: #c62828;
-  color: #7f1616;
+  background: var(--pin-out-bg); /* ya no hay -> rojo suave pero claro */
+  border-color: var(--pin-out-border);
+  color: var(--pin-out-ink);
 }
 
 .map-pin--unknown {
@@ -270,21 +333,21 @@ a:focus-visible {
 }
 
 .map-cluster--confirmed {
-  background: #a5d6a7; /* hay */
-  border-color: #2e7d32;
-  color: #1b4d1e;
+  background: var(--pin-hay-bg); /* hay */
+  border-color: var(--pin-hay-border);
+  color: var(--pin-hay-ink);
 }
 
 .map-cluster--stale {
-  background: #ffe082; /* habia / sin confirmar */
-  border-color: #b26a00;
-  color: #6b4300;
+  background: var(--pin-stale-bg); /* habia / sin confirmar */
+  border-color: var(--pin-stale-border);
+  color: var(--pin-stale-ink);
 }
 
 .map-cluster--out {
-  background: #ef9a9a; /* ya no hay */
-  border-color: #c62828;
-  color: #7f1616;
+  background: var(--pin-out-bg); /* ya no hay */
+  border-color: var(--pin-out-border);
+  color: var(--pin-out-ink);
 }
 
 .map-cluster--unknown {
@@ -337,7 +400,7 @@ a:focus-visible {
   text-transform: uppercase;
   font-size: 22px;
   line-height: 1;
-  color: var(--hay-ink);
+  color: var(--ink);
   margin-top: 4px;
 }
 
@@ -357,9 +420,65 @@ a:focus-visible {
   color: var(--accent);
 }
 
-/* Hide Leaflet's default corner attribution; credit lives in our legend bar. */
-.leaflet-control-attribution {
-  display: none;
+/* Acciones de marcado rapido dentro del popup-ticket (mismo lenguaje visual). */
+.popup-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.popup-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 2px solid var(--line);
+  border-radius: 9999px;
+  background: var(--card);
+  padding: 2px 8px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.popup-mark:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.popup-mark--yes {
+  color: var(--hay-ink);
+}
+
+.popup-mark--no {
+  color: var(--nohay-ink);
+}
+
+.popup-mark-done {
+  font-size: 11px;
+}
+
+.popup-mark-error {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--nohay-ink);
+}
+
+/* Atribucion OSM: centrada al fondo del mapa y siempre visible/clicable
+   (requisito de la licencia OSM). Vive dentro del mapa; la leyenda de estados
+   queda debajo, en el flujo normal, sin solaparse. */
+.leaflet-bottom.leaflet-right {
+  left: 0;
+  text-align: center;
+}
+
+.leaflet-control-container .leaflet-control-attribution {
+  float: none !important;
+  display: inline-block;
+  font-size: 10px;
+  background: rgba(253, 251, 245, 0.85);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,7 +1,9 @@
 import Link from "next/link";
+import EmptyTicket from "@/components/EmptyTicket";
 import { getAvailability } from "@/lib/repo";
 import { MapPinAccent } from "@/lib/product-icons";
 import { formatPrice, queueLabel, timeAgo } from "@/lib/format";
+import { rowStampClass, rowStampLabel } from "@/lib/status";
 
 export const dynamic = "force-dynamic";
 
@@ -27,9 +29,9 @@ export default async function BarrioPage({ params }: Props) {
       <p className="-mt-2 px-1 text-xs text-ink-soft">Disponibilidad de las últimas 6 horas</p>
 
       {rows.length === 0 ? (
-        <div className="card-ticket p-6 text-center text-sm text-ink-soft">
+        <EmptyTicket stamp="Sin reportes">
           Sin reportes activos en este barrio ahora mismo.
-        </div>
+        </EmptyTicket>
       ) : (
         rows.map((row, i) => (
           <article
@@ -49,10 +51,15 @@ export default async function BarrioPage({ params }: Props) {
               </p>
             </div>
             {row.availability === "available" && row.price_from !== null && (
-              <span className="font-display text-lg text-hay-ink">
+              <span className="font-display text-xl text-ink">
                 {formatPrice(row.price_from)}
               </span>
             )}
+            <span
+              className={`stamp text-sm ${rowStampClass(row.status, row.availability)}`}
+            >
+              {rowStampLabel(row.status, row.availability)}
+            </span>
           </article>
         ))
       )}
