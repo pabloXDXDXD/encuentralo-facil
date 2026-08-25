@@ -6,7 +6,7 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import type { Map as LeafletMap } from "leaflet";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Crosshair, MapPin } from "@phosphor-icons/react";
+import { Crosshair, MapPin, Storefront } from "@phosphor-icons/react";
 import { MUNICIPIO_CENTERS, regionFor } from "@/lib/geo";
 import { ProductIcon } from "@/lib/product-icons";
 import { timeAgo } from "@/lib/format";
@@ -31,6 +31,22 @@ type Props = {
   anchor?: { lat: number; lng: number } | null;
   /** Active search radius in meters; drives how far out the camera frames. */
   radiusMeters?: number;
+  /**
+   * Plain tappable store markers (report-flow store picker). No clusters,
+   * no availability popups: clicking a pin calls onStorePinSelect.
+   */
+  storePins?: StorePin[];
+  onStorePinSelect?: (store: { id: string; name: string }) => void;
+  /** Appends a "Reportar aqui" link to every availability popup. */
+  popupReportLink?: boolean;
+};
+
+export type StorePin = {
+  id: string;
+  name: string;
+  barrio: string;
+  lat: number;
+  lng: number;
 };
 
 export type HomeRowLike = {
@@ -72,10 +88,18 @@ const STATUS_CLASS: Record<MapPoint["status"], string> = {
 };
 
 const STATUS_BADGE: Record<MapPoint["status"], string> = {
-  confirmed: "Hay",
-  stale: "Había",
+  confirmed: "Hay (<24h)",
+  stale: "Hay (no seguro)",
   out: "Ya no hay",
   unknown: "Sin datos",
+};
+
+/** Clase del stamp del popup segun estado (mismos colores que los pines). */
+const STATUS_STAMP: Record<MapPoint["status"], string> = {
+  confirmed: "stamp-hay",
+  stale: "stamp-stale",
+  out: "stamp-nohay",
+  unknown: "stamp-unknown",
 };
 
 /** Orden canonico de los estados; un grupo de clusters por cada uno. */
@@ -83,6 +107,7 @@ const STATUS_ORDER: MapPoint["status"][] = ["confirmed", "stale", "out", "unknow
 
 type InternalPoint = {
   key: string;
+  storeId: string;
   lat: number;
   lng: number;
   cls: string;
@@ -120,6 +145,16 @@ function productGlyph(slug: string): string {
   return html;
 }
 
+/** Inline phosphor icon markup for the popup "Reportar aqui" link. */
+function reportLinkGlyph(): string {
+  let html = glyphCache.get("__report_link__");
+  if (html === undefined) {
+    html = renderToStaticMarkup(<MapPin size={12} weight="bold" />);
+    glyphCache.set("__report_link__", html);
+  }
+  return html;
+}
+
 export default function AvailabilityMap({
   rows,
   points,
@@ -129,12 +164,18 @@ export default function AvailabilityMap({
   onPick,
   anchor,
   radiusMeters,
+  storePins,
+  onStorePinSelect,
+  popupReportLink,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const frameRef = useRef<(() => void) | null>(null);
   const anchorMarkerRef = useRef<any>(null);
   const markerLayerRef = useRef<any>(null);
+  // True once the user manually picked a point on this map instance: framing
+  // must stop moving the camera after that.
+  const userPickedRef = useRef(false);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   // La instancia del mapa vive en estado a proposito: al recrear el mapa
   // (cambio de provincia/municipio) setStatus("ready") seria un no-op y el
@@ -199,6 +240,7 @@ export default function AvailabilityMap({
       frameRef.current = null;
       anchorMarkerRef.current = null;
       markerLayerRef.current = null;
+      userPickedRef.current = false;
       mapRef.current?.remove();
       mapRef.current = null;
       setMapInstance(null);
@@ -227,13 +269,34 @@ export default function AvailabilityMap({
 
       let internal: InternalPoint[] = [];
 
-      if (points) {
+      if (storePins) {
+        // Store-picker mode: coords only, no availability semantics.
+        internal = storePins
+          .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng))
+          .map((s) => ({
+            key: s.id,
+            storeId: s.id,
+            lat: s.lat,
+            lng: s.lng,
+            cls: "",
+            statusKey: "unknown" as MapPoint["status"],
+            glyphSlug: "",
+            productName: s.name,
+            storeName: s.name,
+            barrio: s.barrio,
+            priceFrom: null,
+            reporterCount: 0,
+            lastSeenAt: null,
+            badge: "Tienda",
+          }));
+      } else if (points) {
         // Coordenadas invalidas rompen L.marker y abortan todo el repintado
         // (pines Y encuadre): se excluyen igual que en el modo browse.
         internal = points
           .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
           .map((p) => ({
           key: p.store_id + p.slug + p.status,
+          storeId: p.store_id,
           lat: p.lat,
           lng: p.lng,
           cls: STATUS_CLASS[p.status],
@@ -264,6 +327,7 @@ export default function AvailabilityMap({
                   : "unknown";
           internal.push({
             key: r.store_id + r.product_slug,
+            storeId: r.store_id,
             lat: Number(r.lat),
             lng: Number(r.lng),
             cls: STATUS_CLASS[st],
@@ -280,66 +344,87 @@ export default function AvailabilityMap({
         }
       }
 
-      // --- Marcadores con leaflet.markercluster ------------------------------
-      // UN grupo de clusters por ESTADO: un cluster nunca mezcla colores/
-      // estados; cada estado se agrupa (y colorea) por separado.
-      // Los grupos se RECREAN en cada repintado: reciclarlos con clearLayers()
-      // pierde marcadores cuando hay animaciones/transiciones en vuelo.
-      const statusGroups = new Map<MapPoint["status"], any>();
-      for (const st of STATUS_ORDER) {
-        const group = L.markerClusterGroup({
-          disableClusteringAtZoom: MAP_MAX_ZOOM,
-          showCoverageOnHover: false,
-          spiderfyOnMaxZoom: true,
-          maxClusterRadius: 56,
-          // Sin animaciones: los estados intermedios de la animacion eran la
-          // fuente de marcadores perdidos/fantasma al repintar seguido.
-          animate: false,
-          iconCreateFunction: (cluster) =>
-            L.divIcon({
-              className: "",
-              html: `<div class="map-cluster map-cluster--${st}">${cluster.getChildCount()}</div>`,
-              iconSize: [36, 36],
-              iconAnchor: [18, 18],
-            }),
-        });
-        map.addLayer(group);
-        statusGroups.set(st, group);
-      }
-      markerLayerRef.current = statusGroups.get("confirmed");
+      if (storePins) {
+        // Plain tappable store markers: click selects the store, no popups.
+        // Storefront glyph: these are points of sale, not products.
+        const glyph = renderToStaticMarkup(<Storefront weight="fill" size={15} />);
+        for (const p of internal) {
+          const icon = L.divIcon({
+            className: "",
+            html: `<div class="map-pin map-pin--store" title="${p.storeName}">${glyph}</div>`,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16],
+          });
+          const marker = L.marker([p.lat, p.lng], { icon });
+          marker.on("click", () => onStorePinSelect?.({ id: p.storeId, name: p.storeName }));
+          marker.addTo(map);
+        }
+      } else {
+        // --- Marcadores con leaflet.markercluster ------------------------------
+        // UN grupo de clusters por ESTADO: un cluster nunca mezcla colores/
+        // estados; cada estado se agrupa (y colorea) por separado.
+        // Los grupos se RECREAN en cada repintado: reciclarlos con clearLayers()
+        // pierde marcadores cuando hay animaciones/transiciones en vuelo.
+        const statusGroups = new Map<MapPoint["status"], any>();
+        for (const st of STATUS_ORDER) {
+          const group = L.markerClusterGroup({
+            disableClusteringAtZoom: MAP_MAX_ZOOM,
+            showCoverageOnHover: false,
+            spiderfyOnMaxZoom: true,
+            maxClusterRadius: 56,
+            // Sin animaciones: los estados intermedios de la animacion eran la
+            // fuente de marcadores perdidos/fantasma al repintar seguido.
+            animate: false,
+            iconCreateFunction: (cluster) =>
+              L.divIcon({
+                className: "",
+                html: `<div class="map-cluster map-cluster--${st}">${cluster.getChildCount()}</div>`,
+                iconSize: [36, 36],
+                iconAnchor: [18, 18],
+              }),
+          });
+          map.addLayer(group);
+          statusGroups.set(st, group);
+        }
+        markerLayerRef.current = statusGroups.get("confirmed");
 
-      const addPin = (p: InternalPoint) => {
-        const icon = L.divIcon({
-          className: "",
-          html: `<div class="map-pin ${p.cls}" title="${p.badge}">${productGlyph(p.glyphSlug)}</div>`,
-          iconSize: [32, 32],
-          iconAnchor: [16, 16],
-          popupAnchor: [0, -14],
-        });
+        const addPin = (p: InternalPoint) => {
+          const icon = L.divIcon({
+            className: "",
+            html: `<div class="map-pin ${p.cls}" title="${p.badge}">${productGlyph(p.glyphSlug)}</div>`,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16],
+            popupAnchor: [0, -14],
+          });
 
-        const price =
-          p.priceFrom !== null && p.priceFrom !== undefined
-            ? `<div class="popup-price">$${p.priceFrom}</div>`
+          const price =
+            p.priceFrom !== null && p.priceFrom !== undefined
+              ? `<div class="popup-price">$${p.priceFrom}</div>`
+              : "";
+          const meta =
+            p.lastSeenAt != null
+              ? `${timeAgo(p.lastSeenAt)}${p.reporterCount > 1 ? ` · ${p.reporterCount} reportes` : ""}`
+              : "sin reportes recientes";
+          const reportLink = popupReportLink
+            ? `<a class="popup-report" href="/reportar?store=${p.storeId}">${reportLinkGlyph()}<span>Reportar aquí</span></a>`
             : "";
-        const meta =
-          p.lastSeenAt != null
-            ? `${timeAgo(p.lastSeenAt)}${p.reporterCount > 1 ? ` · ${p.reporterCount} reportes` : ""}`
-            : "sin reportes recientes";
-        const html = `
-          <div class="popup-ticket">
-            <div class="popup-name"><span>${p.productName}</span><span class="stamp stamp-hay" style="transform:none;font-size:10px;padding:0 4px;">${p.badge}</span></div>
-            ${price}
-            <div class="popup-meta">${p.storeName}<br/>${p.barrio} · ${meta}</div>
-          </div>`;
+          const html = `
+            <div class="popup-ticket">
+              <div class="popup-name"><span>${p.productName}</span><span class="stamp ${STATUS_STAMP[p.statusKey]}" style="transform:none;font-size:10px;padding:0 4px;">${p.badge}</span></div>
+              ${price}
+              <div class="popup-meta">${p.storeName}<br/>${p.barrio} · ${meta}</div>
+              ${reportLink}
+            </div>`;
 
-        const marker = L.marker([p.lat, p.lng], {
-          icon,
-          status: p.statusKey,
-        } as L.MarkerOptions);
-        marker.bindPopup(html).addTo(statusGroups.get(p.statusKey));
-      };
+          const marker = L.marker([p.lat, p.lng], {
+            icon,
+            status: p.statusKey,
+          } as L.MarkerOptions);
+          marker.bindPopup(html).addTo(statusGroups.get(p.statusKey));
+        };
 
-      for (const p of internal) addPin(p);
+        for (const p of internal) addPin(p);
+      }
 
       // Dibujar el ancla persistida del usuario (prop) en cada repintado,
       // para que sobreviva al cambio browse <-> busqueda (instancias distintas).
@@ -351,6 +436,23 @@ export default function AvailabilityMap({
       // La camara pertenece al USUARIO: en busqueda se centra en su punto con
       // el zoom que dicta el radio elegido, no en los resultados.
       const frame = () => {
+        // Tras un pick manual la camara NUNCA se mueve sola: re-encuadrar al
+        // cambiar el anchor prop descenta el mapa justo cuando el usuario eligio.
+        if (userPickedRef.current) return;
+        // Store-picker: camera belongs to the user's anchor so nearby stores
+        // are in view; without one, frame the store pins.
+        if (storePins) {
+          if (anchor) {
+            map.setView([anchor.lat, anchor.lng], DEFAULT_RADIUS_ZOOM, { animate: false });
+            return;
+          }
+          if (internal.length > 0) {
+            const b = L.latLngBounds([]);
+            for (const p of internal) b.extend([p.lat, p.lng]);
+            map.fitBounds(b.pad(0.25), { maxZoom: MAP_MAX_ZOOM - 1, animate: false });
+            return;
+          }
+        }
         const mc = focusMunicipio ? MUNICIPIO_CENTERS[focusMunicipio] : undefined;
         if (mc && !points) {
           map.setView([mc.lat, mc.lng], 14, { animate: false });
@@ -393,7 +495,7 @@ export default function AvailabilityMap({
     return () => {
       cancelled = true;
     };
-  }, [rows, points, status, focusMunicipio, focusProvincia, anchor, mapInstance]);
+  }, [rows, points, storePins, status, focusMunicipio, focusProvincia, anchor, mapInstance]);
 
   // Pick mode: next click on the map becomes the user's home anchor.
   useEffect(() => {
@@ -410,9 +512,11 @@ export default function AvailabilityMap({
       if (cancelled || !map) return;
 
       const place = (lat: number, lng: number) => {
+        userPickedRef.current = true;
         upsertAnchor(L, map, lat, lng, true);
         onPick?.(lat, lng);
-        map.setView([lat, lng], Math.max(map.getZoom(), 14));
+        // Sin recentrado: el marcador aparece donde se toco y la camara
+        // permanece donde esta (saltos de camara desorientan al elegir).
       };
 
       const handler = (e: L.LeafletMouseEvent) => place(e.latlng.lat, e.latlng.lng);
@@ -460,13 +564,13 @@ export default function AvailabilityMap({
               <span aria-hidden className={`map-pin map-pin--confirmed`} style={{ width: 18, height: 18, fontSize: 10 }}>
                 ✚
               </span>
-              Hay
+              Hay (&lt;24h)
             </span>
             <span className="flex items-center gap-1.5">
               <span aria-hidden className={`map-pin map-pin--uncertain`} style={{ width: 18, height: 18, fontSize: 10 }}>
                 ?
               </span>
-              Había (&gt;1 día)
+              Hay (no seguro)
             </span>
             <span className="flex items-center gap-1.5">
               <span aria-hidden className="map-pin map-pin--out" style={{ width: 18, height: 18, fontSize: 10 }}>

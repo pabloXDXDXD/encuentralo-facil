@@ -7,13 +7,12 @@ import {
   Basket,
   Crosshair,
   Funnel,
-  GlobeHemisphereWest,
+  Gear,
   ListBullets,
   MagnifyingGlass,
   MapPin,
   MapTrifold,
   PlusCircle,
-  SlidersHorizontal,
   Star,
 } from "@phosphor-icons/react";
 import VoteButtons from "@/components/VoteButtons";
@@ -97,6 +96,35 @@ const RADIUS_OPTIONS = [
   { value: 10000, label: "≤10 km" },
 ];
 
+// Chip metadata for the status visibility filter. Selected chips take the
+// status color (same palette as the map pins/legend).
+const STATUS_META = [
+  {
+    key: "confirmed",
+    label: "Hay (<24h)",
+    cls: "map-pin--confirmed",
+    selCls: "bg-[#a5d6a7] text-[#1b4d1e] border-[#2e7d32]",
+  },
+  {
+    key: "stale",
+    label: "Hay (no seguro)",
+    cls: "map-pin--uncertain",
+    selCls: "bg-[#ffe082] text-[#6b4300] border-[#b26a00]",
+  },
+  {
+    key: "out",
+    label: "Ya no hay",
+    cls: "map-pin--out",
+    selCls: "bg-[#ef9a9a] text-[#7f1616] border-[#c62828]",
+  },
+  {
+    key: "unknown",
+    label: "Sin datos",
+    cls: "map-pin--unknown",
+    selCls: "border-dashed opacity-80",
+  },
+] as const;
+
 // Relative time renders after mount only: computing it during SSR and again
 // on hydration makes server and client disagree whenever the clock crosses a
 // minute/hour boundary between both passes.
@@ -123,8 +151,7 @@ export default function HomeView({
   const [filterOn, setFilterOn] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState<"list" | "map">("list");
-  const [showLocation, setShowLocation] = useState(false);
-  const [showViewPanel, setShowViewPanel] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [pickMode, setPickMode] = useState(false);
 
   // --- Search state ---------------------------------------------------------
@@ -136,8 +163,11 @@ export default function HomeView({
   const [gpsBusy, setGpsBusy] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [gpsSupported, setGpsSupported] = useState(true);
-  const [radius, setRadius] = useState(6000);
-  const [confirmedOnly, setConfirmedOnly] = useState(false);
+  const [radius, setRadius] = useState(3000);
+  const [statusFilter, setStatusFilter] = useState<
+    Record<"confirmed" | "stale" | "out" | "unknown", boolean>
+  >({ confirmed: true, stale: true, out: true, unknown: false });
+  const [minPriceInput, setMinPriceInput] = useState("");
   const [maxPriceInput, setMaxPriceInput] = useState("");
   // Panel de sugerencias visible hasta que el usuario lo cierra (Esc o click fuera).
   const [suggestsOpen, setSuggestsOpen] = useState(true);
@@ -229,7 +259,7 @@ export default function HomeView({
   function pickOnMap() {
     // Clear search so the pick map is clean, switch to map, enter pick mode.
     clearSearch();
-    setShowLocation(false);
+    setShowSettings(false);
     setView("map");
     setPickMode(true);
   }
@@ -252,7 +282,6 @@ export default function HomeView({
         lng: String(a.lng),
         radius: String(radius),
       });
-      if (confirmedOnly) params.set("confirmedOnly", "1");
       const mp = Number(maxPriceInput);
       if (Number.isFinite(mp) && mp > 0) params.set("maxPrice", String(Math.round(mp)));
       setSearching(true);
@@ -266,12 +295,12 @@ export default function HomeView({
         setSearching(false);
       }
     },
-    [anchor, radius, confirmedOnly, maxPriceInput, activeMunicipio],
+    [anchor, radius, maxPriceInput, activeMunicipio],
   );
 
-  // Re-run the committed search when radius, confirmed-only or the anchor
-  // change (maxPrice re-runs on blur/Enter already).
-  const searchInputs = `${radius}|${confirmedOnly ? 1 : 0}|${
+  // Re-run the committed search when radius or the anchor change
+  // (prices re-run on blur/Enter already; status/price filters are client-side).
+  const searchInputs = `${radius}|${
     anchor ? `${anchor.lat.toFixed(5)},${anchor.lng.toFixed(5)}` : ""
   }`;
   useEffect(() => {
@@ -371,9 +400,23 @@ export default function HomeView({
   }
 
   // --- Derived map inputs ----------------------------------------------------
+  // Client-side filters: status visibility + min/max price. Hidden statuses
+  // and out-of-price-range rows drop from BOTH the list and the map.
+  const visibleResults = useMemo(() => {
+    if (!results) return null;
+    const min = Number(minPriceInput);
+    const max = Number(maxPriceInput);
+    return results.filter((r) => {
+      if (!statusFilter[r.status]) return false;
+      if (Number.isFinite(min) && min > 0 && (r.price_from === null || r.price_from < min)) return false;
+      if (Number.isFinite(max) && max > 0 && (r.price_from === null || r.price_from > max)) return false;
+      return true;
+    });
+  }, [results, statusFilter, minPriceInput, maxPriceInput]);
+
   const searchPoints: MapPoint[] = useMemo(() => {
-    if (!results) return [];
-    return results.map((r) => ({
+    if (!visibleResults) return [];
+    return visibleResults.map((r) => ({
       store_id: r.store_id,
       lat: r.lat,
       lng: r.lng,
@@ -386,7 +429,7 @@ export default function HomeView({
       reporter_count: r.reporter_count,
       last_seen_at: r.last_seen_at,
     }));
-  }, [results]);
+  }, [visibleResults]);
 
   // --- Onboarding gate --------------------------------------------------------
   // La ubicacion es prerrequisito: un usuario nuevo ve UNICAMENTE la tarjeta
@@ -476,7 +519,8 @@ export default function HomeView({
     <div className="space-y-4">
       {/* --- Sticky search bar --------------------------------------------- */}
       <div ref={suggestBarRef} className="sticky top-0 z-30 -mx-4 bg-paper px-4 pb-1 pt-2">
-        <div className={`card-ticket flex items-center gap-2 px-3 py-2 ${!anchor ? "opacity-60" : ""}`}>
+        <div className="flex items-stretch gap-2">
+        <div className={`card-ticket flex flex-1 items-center gap-2 px-3 py-2 ${!anchor ? "opacity-60" : ""}`}>
           <MagnifyingGlass size={18} className="shrink-0 text-ink-soft" aria-hidden />
           <input
             value={qInput}
@@ -499,6 +543,19 @@ export default function HomeView({
               ✕
             </button>
           )}
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowSettings((v) => !v)}
+          aria-expanded={showSettings}
+          aria-label="Ajustes"
+          title="Ajustes de ubicación y vista"
+          className={`btn h-auto w-11 shrink-0 justify-center rounded-md !p-0 ${
+            showSettings ? "bg-ink text-paper" : "btn-ghost"
+          }`}
+        >
+          <Gear size={20} aria-hidden />
+        </button>
         </div>
 
         {/* Sugerencias en tiempo real (typeahead) */}
@@ -523,45 +580,11 @@ export default function HomeView({
         )}
       </div>
 
-      {/* --- Compact control bar ------------------------------------------- */}
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            setShowLocation((v) => !v);
-            setShowViewPanel(false);
-          }}
-          aria-expanded={showLocation}
-          aria-label="Cambiar ubicación"
-          title="Ubicación"
-          className={`btn h-10 w-10 justify-center rounded-md !p-0 ${
-            showLocation ? "bg-ink text-paper" : "btn-ghost"
-          }`}
-        >
-          <GlobeHemisphereWest size={20} aria-hidden />
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setShowViewPanel((v) => !v);
-            setShowLocation(false);
-          }}
-          aria-expanded={showViewPanel}
-          aria-label="Opciones de vista"
-          title="Vista"
-          className={`btn h-10 w-10 justify-center rounded-md !p-0 ${
-            showViewPanel ? "bg-ink text-paper" : "btn-ghost"
-          }`}
-        >
-          <SlidersHorizontal size={20} aria-hidden />
-        </button>
-        <span className="ml-auto truncate text-xs font-semibold text-ink-soft">
-          {[activeProvincia, activeMunicipio].filter(Boolean).join(" · ") || "Toda Cuba"}
-        </span>
-      </div>
-
-      {showLocation && (
+      {/* --- Settings panel: ubicacion + vista en un mismo lugar ----------- */}
+      {showSettings && (
         <div className="card-flat space-y-3 p-3">
+          <section className="space-y-2">
+            <span className="px-1 text-xs font-bold tracking-wide text-ink-soft">UBICACIÓN</span>
           <button
             type="button"
             onClick={useGps}
@@ -594,18 +617,18 @@ export default function HomeView({
           >
             <MapPin size={16} aria-hidden /> Elegir punto en el mapa
           </button>
-        </div>
-      )}
+        </section>
 
-      {showViewPanel && (
-        <div className="card-flat space-y-2 p-3">
-          <span className="px-1 text-xs text-ink-soft">Tipo de vista</span>
+          <div className="border-t-2 border-dashed border-line" aria-hidden />
+
+          <section className="space-y-2">
+            <span className="px-1 text-xs font-bold tracking-wide text-ink-soft">TIPO DE VISTA</span>
           <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Vista">
             <button
               type="button"
               role="tab"
               aria-selected={view === "list"}
-              onClick={() => { setView("list"); setShowViewPanel(false); }}
+              onClick={() => setView("list")}
               className={`btn justify-center gap-2 rounded-md py-2 text-sm font-bold ${
                 view === "list" ? "bg-ink text-paper" : "btn-ghost"
               }`}
@@ -616,7 +639,7 @@ export default function HomeView({
               type="button"
               role="tab"
               aria-selected={view === "map"}
-              onClick={() => { setView("map"); setShowViewPanel(false); }}
+              onClick={() => setView("map")}
               className={`btn justify-center gap-2 rounded-md py-2 text-sm font-bold ${
                 view === "map" ? "bg-ink text-paper" : "btn-ghost"
               }`}
@@ -624,6 +647,7 @@ export default function HomeView({
               <MapTrifold size={16} aria-hidden /> Mapa
             </button>
           </div>
+          </section>
         </div>
       )}
 
@@ -636,9 +660,19 @@ export default function HomeView({
             <p className="text-xs text-ink-soft">
               {searching
                 ? "Buscando…"
-                : `${results?.length ?? 0} ${results?.length === 1 ? "resultado" : "resultados"}`}
+                : `${visibleResults?.length ?? 0} ${visibleResults?.length === 1 ? "resultado" : "resultados"}`}
             </p>
           </div>
+          {results && results.length > 0 && results[0].product_slug && (
+            <Link
+              href={`/reportar?producto=${results[0].product_slug}`}
+              className="btn btn-ghost shrink-0 rounded-md px-2.5 py-1.5 text-xs"
+              title="Reportar este producto"
+            >
+              <PlusCircle size={14} aria-hidden />
+              Reportar
+            </Link>
+          )}
           <button
             type="button"
             onClick={clearSearch}
@@ -651,42 +685,72 @@ export default function HomeView({
         </div>
       )}
 
-      {/* --- Filters (search mode only) ------------------------------------- */}
+      {/* --- Filters (search mode only), grouped ----------------------------- */}
       {searchMode && (
-        <div className="flex flex-wrap items-center gap-2">
-          {RADIUS_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setRadius(opt.value)}
-              aria-pressed={radius === opt.value}
-              className={`btn shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
-                radius === opt.value ? "bg-ink text-paper" : "btn-ghost"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setConfirmedOnly((v) => !v)}
-            aria-pressed={confirmedOnly}
-            className={`btn shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
-              confirmedOnly ? "bg-accent text-on-accent" : "btn-ghost"
-            }`}
-          >
-            Solo confirmados
-          </button>
-          <input
-            value={maxPriceInput}
-            onChange={(e) => setMaxPriceInput(e.target.value.replace(/[^0-9]/g, ""))}
-            onBlur={() => void runSearch(activeQuery)}
-            onKeyDown={(e) => e.key === "Enter" && void runSearch(activeQuery)}
-            placeholder="Máx $"
-            inputMode="numeric"
-            aria-label="Precio máximo"
-            className="w-20 shrink-0 rounded-full border-2 border-ink bg-card px-3 py-1 text-xs"
-          />
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-1 px-1 text-xs font-bold tracking-wide text-ink-soft">
+              <Crosshair size={12} aria-hidden /> DISTANCIA
+            </span>
+            {RADIUS_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setRadius(opt.value)}
+                aria-pressed={radius === opt.value}
+                className={`btn shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
+                  radius === opt.value ? "bg-ink text-paper" : "btn-ghost"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-1 px-1 text-xs font-bold tracking-wide text-ink-soft">
+              <Funnel size={12} aria-hidden /> ESTADOS
+            </span>
+            {STATUS_META.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => setStatusFilter((prev) => ({ ...prev, [s.key]: !prev[s.key] }))}
+                aria-pressed={statusFilter[s.key]}
+                title={statusFilter[s.key] ? "Ocultar este estado" : "Mostrar este estado"}
+                className={`btn shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
+                  statusFilter[s.key] ? s.selCls : "btn-ghost opacity-50"
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-1 px-1 text-xs font-bold tracking-wide text-ink-soft">
+              <Basket size={12} aria-hidden /> PRECIO
+            </span>
+            <input
+              value={minPriceInput}
+              onChange={(e) => setMinPriceInput(e.target.value.replace(/[^0-9]/g, ""))}
+              placeholder="Mín $"
+              inputMode="numeric"
+              aria-label="Precio mínimo"
+              className="w-20 shrink-0 rounded-full border-2 border-ink bg-card px-3 py-1 text-xs"
+            />
+            <span className="text-xs text-ink-soft" aria-hidden>–</span>
+            <input
+              value={maxPriceInput}
+              onChange={(e) => setMaxPriceInput(e.target.value.replace(/[^0-9]/g, ""))}
+              onBlur={() => void runSearch(activeQuery)}
+              onKeyDown={(e) => e.key === "Enter" && void runSearch(activeQuery)}
+              placeholder="Máx $"
+              inputMode="numeric"
+              aria-label="Precio máximo"
+              className="w-20 shrink-0 rounded-full border-2 border-ink bg-card px-3 py-1 text-xs"
+            />
+          </div>
         </div>
       )}
 
@@ -719,6 +783,7 @@ export default function HomeView({
             focusProvincia={activeProvincia}
             anchor={anchor}
             radiusMeters={radius}
+            popupReportLink
           />
         ) : (
           <section className="space-y-2">
@@ -730,7 +795,12 @@ export default function HomeView({
                 Nada encontrado para «{activeQuery}» en este radio.
               </div>
             )}
-            {results?.map((r, i) => (
+            {!searching && results && results.length > 0 && visibleResults?.length === 0 && (
+              <div className="card-ticket p-6 text-center text-sm text-ink-soft">
+                Ningún resultado pasa los filtros actuales.
+              </div>
+            )}
+            {visibleResults?.map((r, i) => (
               <article
                 key={r.store_id}
                 className="card-ticket rise flex items-center gap-3 p-3"
@@ -754,14 +824,16 @@ export default function HomeView({
                     r.status === "confirmed"
                       ? "stamp-hay -rotate-2"
                       : r.status === "stale"
-                        ? "stamp-hay rotate-1 opacity-80"
-                        : "stamp-nohay rotate-2"
+                        ? "stamp-stale rotate-1"
+                        : r.status === "unknown"
+                          ? "stamp-unknown rotate-2"
+                          : "stamp-nohay rotate-2"
                   }`}
                 >
                   {r.status === "confirmed"
-                    ? "Hay"
+                    ? "Hay (<24h)"
                     : r.status === "stale"
-                      ? "Había"
+                      ? "Hay (no seguro)"
                       : r.status === "out"
                         ? "Ya no hay"
                         : "Sin datos"}
@@ -780,6 +852,7 @@ export default function HomeView({
           pickMode={pickMode}
           onPick={onAnchorPicked}
           anchor={anchor}
+          popupReportLink
         />
       )}
 
@@ -808,7 +881,7 @@ export default function HomeView({
               <p className="mx-auto mt-1 max-w-xs text-sm text-ink-soft">
                 {filtering && saved.length === 0
                   ? "Toca la estrella de un producto para seguirlo."
-                  : "Lo reportado pasa a «había» tras 24 horas. Sé quien encienda la zona."}
+                  : "Lo reportado pasa a «Hay (no seguro)» tras 24 horas. Sé quien encienda la zona."}
               </p>
             </div>
           )}

@@ -107,11 +107,13 @@ export type StoreSummary = {
   name: string;
   barrio: string;
   kind: string;
+  lat: number | null;
+  lng: number | null;
 };
 
 export async function searchStores(q?: string | null, barrio?: string | null) {
   const { rows } = await query<StoreSummary>(
-    `select id, name, barrio, kind
+    `select id, name, barrio, kind, lat::float8 as lat, lng::float8 as lng
        from public.stores
       where status = 'active'
         and ($1::text is null or barrio = $1)
@@ -140,6 +142,63 @@ export async function createStore(
     lng ?? null,
   ]);
   return rows[0].result;
+}
+
+/**
+ * Community-suggested store: direct ACTIVE insert (user-approved decision,
+ * no moderation queue). Caller is responsible for the proximity duplicate
+ * check (findSimilarActiveStore) before invoking this.
+ */
+export async function insertActiveStore(
+  name: string,
+  barrio: string,
+  kind: string,
+  lat?: number | null,
+  lng?: number | null,
+): Promise<{ id: string }> {
+  const { rows } = await query<{ id: string }>(
+    `insert into public.stores (name, barrio, kind, lat, lng, status, source)
+     values ($1, $2, $3, $4, $5, 'active', 'community')
+     returning id`,
+    [name, barrio, kind, lat ?? null, lng ?? null],
+  );
+  return rows[0];
+}
+
+/** Anti-duplicate radius for community store suggestions, in meters. */
+const SIMILAR_STORE_RADIUS_M = 50;
+
+/**
+ * Nearest ACTIVE store within `radiusM` meters whose name overlaps the given
+ * one (case-insensitive containment either way). Requires coords; without
+ * them there is no proximity signal and nothing matches.
+ */
+export async function findSimilarActiveStore(
+  name: string,
+  lat: number | null,
+  lng: number | null,
+  radiusM: number = SIMILAR_STORE_RADIUS_M,
+): Promise<{ id: string; name: string } | null> {
+  if (lat === null || lng === null) return null;
+  const { rows } = await query<{ id: string; name: string }>(
+    `select id, name
+       from public.stores
+      where status = 'active'
+        and lat is not null and lng is not null
+        and (
+          6371000 * 2 * asin(sqrt(
+            power(sin(radians(lat - $2) / 2), 2) +
+            cos(radians($2)) * cos(radians(lat)) *
+            power(sin(radians(lng - $3) / 2), 2)
+          ))
+        ) <= $4
+        and (position(lower($1) in lower(name)) > 0
+             or position(lower(name) in lower($1)) > 0)
+      order by created_at desc
+      limit 1`,
+    [name, lat, lng, radiusM],
+  );
+  return rows[0] ?? null;
 }
 
 export type CatalogProduct = {
@@ -235,4 +294,38 @@ export async function getStoreById(id: string) {
     id,
   ]);
   return rows[0] ?? null;
+}
+
+/** Window (hours) under which a fresh report is considered a duplicate. */
+export const RECENT_REPORT_HOURS = 2;
+
+export type LatestReportInfo = {
+  found: boolean;
+  hoursAgo: number | null;
+  reportId: string | null;
+};
+
+/**
+ * Most recent report for store+product. `found` is true only when it falls
+ * inside the RECENT_REPORT_HOURS window (anti-duplicate on the confirm step).
+ */
+export async function getLatestRecentReport(
+  storeId: string,
+  productId: string,
+): Promise<LatestReportInfo> {
+  const { rows } = await query<{ id: string; created_at: string | Date }>(
+    `select id, created_at
+       from public.reports
+      where store_id = $1 and product_id = $2
+      order by created_at desc
+      limit 1`,
+    [storeId, productId],
+  );
+  if (rows.length === 0) return { found: false, hoursAgo: null, reportId: null };
+  const ageHours = (Date.now() - new Date(rows[0].created_at).getTime()) / 3_600_000;
+  return {
+    found: ageHours <= RECENT_REPORT_HOURS,
+    hoursAgo: Math.round(ageHours * 10) / 10,
+    reportId: rows[0].id,
+  };
 }

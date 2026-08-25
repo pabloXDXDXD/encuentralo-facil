@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createStore, searchStores } from "@/lib/repo";
+import { findSimilarActiveStore, insertActiveStore, searchStores } from "@/lib/repo";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  let body: { name?: unknown; barrio?: unknown; lat?: unknown; lng?: unknown };
+  let body: { name?: unknown; barrio?: unknown; kind?: unknown; lat?: unknown; lng?: unknown; force?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -32,20 +32,40 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "invalid_input" }, { status: 400 });
   }
 
+  const kind =
+    typeof body.kind === "string" && KINDS.has(body.kind) ? body.kind : "other";
+  const force = body.force === true;
+
   const parseCoord = (v: unknown): number | null => {
     if (v === null || v === undefined || v === "") return null;
     const n = Number(v);
     return Number.isFinite(n) ? Math.round(n * 1e6) / 1e6 : null;
   };
+  const lat = parseCoord(body.lat);
+  const lng = parseCoord(body.lng);
+
+  // Proximity anti-duplicate: an ACTIVE store within 50m with a similar name
+  // is surfaced to the user instead of silently creating a twin. `force`
+  // confirms it really is a different point.
+  if (!force) {
+    try {
+      const similar = await findSimilarActiveStore(name, lat, lng);
+      if (similar) {
+        return NextResponse.json({
+          ok: false,
+          error: "possible_duplicate",
+          storeId: similar.id,
+          storeName: similar.name,
+        });
+      }
+    } catch {
+      /* check unavailable -> fall through to creation */
+    }
+  }
 
   try {
-    const result = await createStore(name, barrio, "other", parseCoord(body.lat), parseCoord(body.lng));
-    return NextResponse.json({
-      ok: result.ok,
-      error: result.error,
-      storeId: result.store_id,
-      existing: result.existing,
-    });
+    const created = await insertActiveStore(name, barrio, kind, lat, lng);
+    return NextResponse.json({ ok: true, storeId: created.id });
   } catch {
     return NextResponse.json({ ok: false, error: "server_error" }, { status: 503 });
   }

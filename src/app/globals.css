@@ -110,6 +110,19 @@ body {
   color: var(--hay-ink);
 }
 
+/* "Hay (no seguro)": ambar, mismo color del pin uncertain */
+.stamp-stale {
+  background: #ffe082;
+  color: #6b4300;
+}
+
+/* "Sin datos": neutro punteado, mismo color del pin unknown */
+.stamp-unknown {
+  background: transparent;
+  border-style: dashed;
+  color: var(--ink-soft);
+}
+
 .stamp-nohay {
   background: var(--nohay-bg);
   color: var(--nohay-ink);
@@ -231,6 +244,14 @@ a:focus-visible {
   border-color: var(--ink);
 }
 
+/* Punto de venta (store picker): tarjeta con borde acento para distinguir
+   los comercios existentes de los pines de producto. */
+.map-pin--store {
+  background: var(--card);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
 /* Cluster badge (leaflet.markercluster): muestra el total y el estado
    dominante de sus puntos, con la misma paleta que los pines. */
 .map-cluster {
@@ -324,6 +345,16 @@ a:focus-visible {
   margin-top: 4px;
   font-size: 11px;
   color: var(--ink-soft);
+}
+
+.popup-ticket .popup-report {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
 }
 
 /* Hide Leaflet's default corner attribution; credit lives in our legend bar. */
