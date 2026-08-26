@@ -1,25 +1,23 @@
 import ReportFlow from "@/components/ReportFlow";
-import { getStoreById, getProductBySlug, listBarrios } from "@/lib/repo";
+import { getPlaceById, getProductBySlug } from "@/lib/repo";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Reportar — DóndeHay" };
 
 type Props = {
-  searchParams?: Promise<{ provincia?: string; producto?: string; store?: string }>;
+  searchParams?: Promise<{
+    provincia?: string;
+    producto?: string;
+    place?: string;
+    store?: string;
+  }>;
 };
 
 export default async function ReportarPage({ searchParams }: Props) {
   const params = (await searchParams) ?? {};
   const provincia = params.provincia ?? null;
 
-  let barrios: string[] = [];
-  try {
-    barrios = await listBarrios(provincia);
-  } catch {
-    /* flow still works with an empty filter */
-  }
-
-  // Prefill via URL: /reportar?producto=<slug> and/or ?store=<id>.
+  // Prefill via URL: /reportar?producto=<slug> y/o ?place=<id>.
   let initialProduct: { id: string; slug: string; name: string; emoji: string } | null = null;
   if (params.producto) {
     try {
@@ -28,12 +26,30 @@ export default async function ReportarPage({ searchParams }: Props) {
       initialProduct = null;
     }
   }
-  let initialStore: { id: string; name: string } | null = null;
-  if (params.store) {
+
+  // El param legado ?store= se aliasa a ?place= (bundles viejos, D6): los
+  // lugares heredan los UUID de las tiendas. Id desconocido o inactivo ->
+  // null, y el flujo arranca con el pin vacio sin romperse.
+  let initialPlace: {
+    id: string;
+    name: string;
+    lat: number | null;
+    lng: number | null;
+  } | null = null;
+  const rawPlace = params.place ?? params.store;
+  if (rawPlace) {
     try {
-      initialStore = await getStoreById(params.store);
+      const place = await getPlaceById(rawPlace);
+      if (place) {
+        initialPlace = {
+          id: place.id,
+          name: place.label,
+          lat: place.lat,
+          lng: place.lng,
+        };
+      }
     } catch {
-      initialStore = null;
+      initialPlace = null;
     }
   }
 
@@ -44,10 +60,9 @@ export default async function ReportarPage({ searchParams }: Props) {
         <p className="px-1 text-xs text-ink-soft">Provincia activa: {provincia}</p>
       )}
       <ReportFlow
-        barrios={barrios}
         provincia={provincia}
         initialProduct={initialProduct}
-        initialStore={initialStore}
+        initialPlace={initialPlace}
       />
     </div>
   );

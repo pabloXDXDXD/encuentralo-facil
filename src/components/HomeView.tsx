@@ -34,7 +34,7 @@ const AvailabilityMapDynamic = dynamic(() => import("@/components/AvailabilityMa
 export type HomeRow = {
   store_id: string;
   store_name: string;
-  barrio: string;
+  barrio: string | null;
   product_slug: string;
   product_name: string;
   emoji: string;
@@ -51,7 +51,7 @@ export type HomeRow = {
 type SearchRow = {
   store_id: string;
   store_name: string;
-  barrio: string;
+  barrio: string | null;
   product_slug: string;
   product_name: string;
   lat: number;

@@ -260,12 +260,15 @@ export type PlaceSummary = {
   label: string;
   barrio: string | null;
   municipio: string | null;
+  lat: number | null;
+  lng: number | null;
 };
 
 export async function getPlaceById(id: string) {
   if (!UUID_RE.test(id)) return null;
   const { rows } = await query<PlaceSummary>(
-    `select id, label, barrio, municipio from public.places where id = $1 and active = true`,
+    `select id, label, barrio, municipio, lat, lng
+       from public.places where id = $1 and active = true`,
     [id],
   );
   return rows[0] ?? null;
@@ -484,20 +487,20 @@ export type LatestReportInfo = {
 };
 
 /**
- * Most recent report for store+product. `found` is true only when it falls
- * inside the RECENT_REPORT_HOURS window (anti-duplicate on the confirm step).
+ * Ultimo reporte de lugar+producto. `found` es true solo si cae dentro de la
+ * ventana RECENT_REPORT_HOURS (aviso anti-duplicados del paso de confirmacion).
  */
 export async function getLatestRecentReport(
-  storeId: string,
+  placeId: string,
   productId: string,
 ): Promise<LatestReportInfo> {
   const { rows } = await query<{ id: string; created_at: string | Date }>(
     `select id, created_at
        from public.reports
-      where store_id = $1 and product_id = $2
+      where place_id = $1 and product_id = $2
       order by created_at desc
       limit 1`,
-    [storeId, productId],
+    [placeId, productId],
   );
   if (rows.length === 0) return { found: false, hoursAgo: null, reportId: null };
   const ageHours = (Date.now() - new Date(rows[0].created_at).getTime()) / 3_600_000;

@@ -4,9 +4,15 @@ import type { Availability } from "./repo-types";
 
 export type OutboxEntry = {
   id: string;
-  /** Lugar ancla (era places): los envios nuevos siempre traen placeId. */
+  /** Lugar ancla (era places): los envios nuevos con lugar existente traen placeId. */
   placeId?: string;
   placeName?: string | null;
+  /**
+   * Pin del reporte (modo coordenadas): los envios nuevos sin lugar existente
+   * traen lat/lng; /api/reports valida placeId XOR lat+lng.
+   */
+  lat?: number;
+  lng?: number;
   /**
    * @deprecated Era tiendas: las entradas viejas en IndexedDB solo traen
    * estos campos y drenan porque /api/reports aliasa storeId -> placeId (D6).
@@ -105,9 +111,12 @@ export async function flushOutbox(deviceId: string): Promise<void> {
           "x-device-id": deviceId,
         },
         body: JSON.stringify({
-          // Era places envia placeId; las entradas legadas caen a storeId,
-          // que /api/reports aliasa a placeId (D6).
+          // Era places: lugar existente envia placeId (las entradas legadas
+          // caen a storeId, que /api/reports aliasa, D6); pin manual envia
+          // lat/lng. Los undefined se omiten y el XOR de intake se cumple.
           placeId: entry.placeId ?? entry.storeId,
+          lat: entry.lat,
+          lng: entry.lng,
           productId: entry.productId,
           availability: entry.availability,
           priceCup: entry.priceCup,
