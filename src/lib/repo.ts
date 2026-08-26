@@ -271,6 +271,15 @@ export async function getPlaceById(id: string) {
   return rows[0] ?? null;
 }
 
+/** Lectura de una pagina de lugar sobre get_place_availability (nombres legados, D5). */
+export async function getPlaceAvailability(placeId: string) {
+  const { rows } = await query<RawAvailabilityRow>(
+    "select * from public.get_place_availability($1)",
+    [placeId],
+  );
+  return normalize(rows);
+}
+
 export type StoreSummary = {
   id: string;
   name: string;
