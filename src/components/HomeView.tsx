@@ -5,30 +5,22 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
   Basket,
-  Check,
   Crosshair,
   Funnel,
   Gear,
-  ListBullets,
   MagnifyingGlass,
   MapPin,
-  MapTrifold,
   PlusCircle,
   Spinner,
-  Star,
   X,
 } from "@phosphor-icons/react";
-import EmptyTicket from "@/components/EmptyTicket";
 import Notice from "@/components/Notice";
-import VoteButtons from "@/components/VoteButtons";
 import AvailabilityMap, { type MapPoint } from "@/components/AvailabilityMap";
 import { ProductIcon } from "@/lib/product-icons";
 import { MUNICIPIO_CENTERS } from "@/lib/geo";
 import { PRODUCT_CATALOG } from "@/lib/product-catalog";
-import { formatPrice, queueLabel, timeAgo } from "@/lib/format";
-import { quickMarkReport } from "@/lib/quick-mark";
-
-const SAVED_KEY = "dh_saved_products";
+import { formatPrice } from "@/lib/format";
+import { selectBestPrice } from "@/lib/best-price";
 
 const AvailabilityMapDynamic = dynamic(() => import("@/components/AvailabilityMap"), {
   ssr: false,
@@ -71,32 +63,12 @@ type SearchRow = {
   last_seen_at: string | null;
 };
 
-// Estado del marcado rápido por fila de búsqueda (clave: store_id).
-type MarkState = { phase: "sending" | "done" | "error"; msg?: string };
-
 type Props = {
   rows: HomeRow[];
   activeProvincia: string | null;
   activeMunicipio: string | null;
   offline: boolean;
 };
-
-function readSaved(): string[] {
-  try {
-    const raw = localStorage.getItem(SAVED_KEY);
-    return raw ? (JSON.parse(raw) as string[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeSaved(list: string[]) {
-  try {
-    localStorage.setItem(SAVED_KEY, JSON.stringify(list.slice(-200)));
-  } catch {
-    /* ignore */
-  }
-}
 
 const RADIUS_OPTIONS = [
   { value: 1500, label: "≤1.5 km" },
@@ -134,24 +106,6 @@ const STATUS_META = [
   },
 ] as const;
 
-const STAMP_BY_STATUS: Record<string, string> = {
-  confirmed: "stamp-hay",
-  stale: "stamp-stale",
-  unknown: "stamp-unknown",
-  out: "stamp-nohay",
-};
-
-// Relative time renders after mount only: computing it during SSR and again
-// on hydration makes server and client disagree whenever the clock crosses a
-// minute/hour boundary between both passes.
-function RelativeTime({ date }: { date: string | Date }) {
-  const [text, setText] = useState("");
-  useEffect(() => {
-    setText(timeAgo(date));
-  }, [date]);
-  return <>{text}</>;
-}
-
 function fmtDist(m: number): string {
   return m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`;
 }
@@ -163,10 +117,7 @@ export default function HomeView({
   offline,
 }: Props) {
   const [rowsState, setRowsState] = useState<HomeRow[]>(rows);
-  const [saved, setSaved] = useState<string[]>([]);
-  const [filterOn, setFilterOn] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [view, setView] = useState<"list" | "map">("list");
   const [showSettings, setShowSettings] = useState(false);
   const [pickMode, setPickMode] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -191,11 +142,8 @@ export default function HomeView({
   const suggestBarRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    setSaved(readSaved());
     setLoaded(true);
     try {
-      const pref = localStorage.getItem("dh_pref_view");
-      if (pref === "map" || pref === "list") setView(pref);
       const savedAnchor = localStorage.getItem("dh_home_anchor");
       if (savedAnchor) setAnchor(JSON.parse(savedAnchor));
       setGpsSupported(Boolean(navigator.geolocation));
@@ -204,25 +152,10 @@ export default function HomeView({
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    try {
-      localStorage.setItem("dh_pref_view", view);
-    } catch {
-      /* ignore */
-    }
-  }, [view]);
-
-
   // Parent refetches rows after a location change — adopt them wholesale.
   useEffect(() => {
     setRowsState(rows);
   }, [rows]);
-
-  function toggleSave(slug: string) {
-    const next = saved.includes(slug) ? saved.filter((s) => s !== slug) : [...saved, slug];
-    setSaved(next);
-    writeSaved(next);
-  }
 
   /** Resolve the search anchor: saved GPS/pick > municipality centroid > region. */
   function resolveAnchor(): { lat: number; lng: number } {
@@ -274,10 +207,9 @@ export default function HomeView({
   }, [gpsError]);
 
   function pickOnMap() {
-    // Clear search so the pick map is clean, switch to map, enter pick mode.
+    // Clear search so the pick map is clean, then enter pick mode.
     clearSearch();
     setShowSettings(false);
-    setView("map");
     setPickMode(true);
   }
 
@@ -350,32 +282,7 @@ export default function HomeView({
     return () => document.removeEventListener("mousedown", onDocMouseDown);
   }, []);
 
-  const filtering = filterOn && saved.length > 0;
-
-  // Browse-mode rows (no active query)
-  const browseVisible = useMemo(
-    () =>
-      filtering ? rowsState.filter((r) => saved.includes(r.product_slug)) : rowsState,
-    [rowsState, filtering, saved],
-  );
-
-  const byZone = useMemo(() => {
-    const map = new Map<string, HomeRow[]>();
-    for (const row of browseVisible) {
-      const list = map.get(row.barrio) ?? [];
-      list.push(row);
-      map.set(row.barrio, list);
-    }
-    return map;
-  }, [browseVisible]);
-
   const searchMode = activeQuery.length >= 2;
-
-  // Todavia no se ha lanzado ninguna busqueda real: tras fijar la ubicacion el
-  // usuario ve SOLO el buscador y una tarjeta de estado vacio — nada de datos
-  // browse ni mapa con pines hasta que busque. Al limpiar la busqueda se vuelve
-  // a este estado vacio.
-  const hasSearched = searchMode || results !== null;
 
   // La ubicacion es prerrequisito: sin ancla no se busca (se hidrata desde
   // localStorage en el effect de arriba; `loaded` evita el flash inicial).
@@ -388,7 +295,7 @@ export default function HomeView({
     (minPriceInput !== "" || maxPriceInput !== "" ? 1 : 0);
 
   // Sugerencias de productos en tiempo real (typeahead). Combina el catalogo
-  // estatico (funciona offline) con conteos de tiendas del snapshot.
+  // estatico (funciona offline) con conteos de lugares del snapshot.
   const productSuggestions = useMemo(() => {
     const q = qInput.trim().toLowerCase();
     if (q.length < 2) return [];
@@ -424,7 +331,7 @@ export default function HomeView({
 
   // --- Derived map inputs ----------------------------------------------------
   // Client-side filters: status visibility + min/max price. Hidden statuses
-  // and out-of-price-range rows drop from BOTH the list and the map.
+  // and out-of-price-range rows drop from the map.
   const visibleResults = useMemo(() => {
     if (!results) return null;
     const min = Number(minPriceInput);
@@ -456,33 +363,16 @@ export default function HomeView({
     }));
   }, [visibleResults]);
 
-  // --- Marcado rapido: crea un reporte nuevo desde la fila (una sola linea) --
-  const [marks, setMarks] = useState<Record<string, MarkState>>({});
-  // Guardia dura contra dobles toques mientras vuela el envio por fila.
-  const markingRef = useRef<Set<string>>(new Set());
-
-  async function quickMarkRow(r: SearchRow, availability: "available" | "out_of_stock") {
-    if (markingRef.current.has(r.store_id)) return;
-    markingRef.current.add(r.store_id);
-    setMarks((prev) => ({ ...prev, [r.store_id]: { phase: "sending" } }));
-    const res = await quickMarkReport({
-      // Fila de busqueda: store_id/store_name son legados (D5) y llevan place.
-      placeId: r.store_id,
-      placeName: r.store_name,
-      productSlug: r.product_slug,
-      productName: r.product_name,
-      availability,
-    });
-    markingRef.current.delete(r.store_id);
-    setMarks((prev) => ({
-      ...prev,
-      [r.store_id]: res.ok ? { phase: "done" } : { phase: "error", msg: res.error },
-    }));
-  }
+  // --- Chip "Mejor precio": el minimo price_from entre los resultados
+  // visibles, con la distancia de la propia fila ganadora (sin fetch extra).
+  const bestPrice = useMemo(
+    () => (visibleResults ? selectBestPrice(visibleResults) : null),
+    [visibleResults],
+  );
 
   // --- Onboarding gate --------------------------------------------------------
   // La ubicacion es prerrequisito: un usuario nuevo ve UNICAMENTE la tarjeta
-  // de bienvenida (sin buscador, sin paneles y sin vistas browse).
+  // de bienvenida (sin buscador, sin paneles y sin mapa).
   // resolveAnchor() solo fabrica un ancla al buscar; hasta que el usuario no
   // guarda una (GPS o mapa), `anchor` permanece null y la puerta sigue activa.
   if (needsAnchor) {
@@ -523,7 +413,6 @@ export default function HomeView({
               type="button"
               onClick={() => {
                 clearSearch();
-                setView("map");
                 setPickMode(true);
               }}
               className="btn btn-ghost justify-center rounded-md py-3"
@@ -622,14 +511,14 @@ export default function HomeView({
               >
                 <span className="text-lg" aria-hidden>{s.emoji}</span>
                 <span className="flex-1 truncate font-semibold">{s.name}</span>
-                <span className="text-xs text-ink-soft">{s.n} {s.n === 1 ? "tienda" : "tiendas"}</span>
+                <span className="text-xs text-ink-soft">{s.n} {s.n === 1 ? "lugar" : "lugares"}</span>
               </button>
             ))}
           </div>
         )}
       </div>
 
-      {/* --- Settings panel: ubicacion + vista en un mismo lugar ----------- */}
+      {/* --- Settings panel: ubicacion -------------------------------------- */}
       {showSettings && (
         <div className="card-flat space-y-3 p-3">
           <section className="space-y-2">
@@ -794,184 +683,35 @@ export default function HomeView({
         </div>
       )}
 
-      {/* --- Estado vacio pre-busqueda -------------------------------------- */}
-      {!hasSearched && (
-        <div className="card-ticket p-6 text-center" style={{ "--i": 0 } as React.CSSProperties}>
-          <Basket aria-hidden size={44} className="mx-auto text-ink-soft" weight="duotone" />
-          <p className="mt-2 font-display text-xl">¿Qué buscas hoy?</p>
-          <p className="mx-auto mt-1 max-w-xs text-sm text-ink-soft">
-            Busca un producto para ver qué hay cerca.
-          </p>
-          <p className="mt-2 text-xs text-ink-soft">Prueba con «pollo», «café» o «arroz»…</p>
-        </div>
+      {/* --- Chip "Mejor precio" (search mode) ------------------------------- */}
+      {searchMode && bestPrice && (
+        <p className="card-flat flex items-center gap-2 px-3 py-2 text-sm">
+          <span className="font-bold">Mejor precio:</span>
+          <span className="font-display text-lg leading-none text-ink">
+            {formatPrice(bestPrice.price)}
+          </span>
+          <span className="text-ink-soft">· a {fmtDist(bestPrice.distanceM)}</span>
+        </p>
       )}
 
-      {hasSearched && (
-        <>
-          {/* --- View switch: siempre visible sobre los resultados -------------- */}
-          <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Vista">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={view === "list"}
-              onClick={() => setView("list")}
-              className={`btn justify-center gap-2 rounded-md py-2 text-sm font-bold ${
-                view === "list" ? "bg-ink text-paper" : "btn-ghost"
-              }`}
-            >
-              <ListBullets size={16} aria-hidden /> Lista
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={view === "map"}
-              onClick={() => setView("map")}
-              className={`btn justify-center gap-2 rounded-md py-2 text-sm font-bold ${
-                view === "map" ? "bg-ink text-paper" : "btn-ghost"
-              }`}
-            >
-              <MapTrifold size={16} aria-hidden /> Mapa
-            </button>
-          </div>
-
-          {/* --- SEARCH RESULTS -------------------------------------------------- */}
-          {searchMode &&
-        (view === "map" ? (
-          <AvailabilityMapDynamic
-            points={searchPoints}
-            focusProvincia={activeProvincia}
-            anchor={anchor}
-            radiusMeters={radius}
-            popupReportLink
-          />
-        ) : (
-          <section className="space-y-2">
-            {searching && (
-              <>
-                <p className="px-1 text-xs text-ink-soft">Buscando «{activeQuery}»…</p>
-                {[0, 1, 2].map((i) => (
-                  <div key={i} aria-hidden className="card-ticket animate-pulse p-3">
-                    <div className="h-3.5 w-1/3 rounded-sm border-2 border-dashed border-line bg-card" />
-                    <div className="mt-2 h-2.5 w-1/2 rounded-sm border-2 border-dashed border-line bg-card" />
-                  </div>
-                ))}
-              </>
-            )}
-            {!searching && results?.length === 0 && (
-              <EmptyTicket stamp="Sin resultados">
-                Nada encontrado para «{activeQuery}» en este radio.
-              </EmptyTicket>
-            )}
-            {!searching && results && results.length > 0 && visibleResults?.length === 0 && (
-              <EmptyTicket stamp="Sin resultados">
-                Ningún resultado pasa los filtros actuales.
-              </EmptyTicket>
-            )}
-            {!searching && visibleResults && visibleResults.length > 0 && (
-              <ul className="card-ticket rise divide-y-2 divide-dashed divide-line overflow-hidden">
-                {visibleResults.map((r) => (
-                  <li key={r.store_id} className="p-3">
-                    <div className="flex items-center gap-3">
-                      <span className="w-14 shrink-0 text-center text-xs font-bold text-ink-soft">
-                        {fmtDist(r.distance_m)}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-semibold">{r.store_name}</p>
-                      </div>
-                      {r.status !== "unknown" && r.price_from !== null && (
-                        <span className="font-display text-xl leading-none text-ink">
-                          {formatPrice(r.price_from)}
-                        </span>
-                      )}
-                      <span
-                        className={`stamp stamp--flat text-xs ${STAMP_BY_STATUS[r.status] ?? "stamp-unknown"}`}
-                      >
-                        {STATUS_META.find((s) => s.key === r.status)?.label ?? "Sin datos"}
-                      </span>
-                    </div>
-                    <QuickMarkLine
-                      row={r}
-                      mark={marks[r.store_id]}
-                      onMark={quickMarkRow}
-                    />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        ))}
-
-      {/* --- BROWSE MODE (sin búsqueda) -------------------------------------- */}
-      {view === "map" && !searchMode && (
+      {/* --- Mapa: vista unica del home -------------------------------------- */}
+      {searchMode ? (
         <AvailabilityMapDynamic
-          rows={browseVisible}
+          points={searchPoints}
+          focusProvincia={activeProvincia}
+          anchor={anchor}
+          radiusMeters={radius}
+          popupReportLink
+        />
+      ) : (
+        <AvailabilityMapDynamic
+          rows={rowsState}
           focusMunicipio={activeMunicipio}
           focusProvincia={activeProvincia}
-          pickMode={pickMode}
-          onPick={onAnchorPicked}
           anchor={anchor}
           popupReportLink
         />
       )}
-
-      {!searchMode && view === "list" && (
-        <>
-          <button
-            type="button"
-            onClick={() => setFilterOn((v) => !v)}
-            aria-pressed={filtering}
-            className={`btn w-full justify-between rounded-md px-3 py-2 text-sm ${
-              filtering ? "bg-ink text-paper" : "btn-ghost border-dashed"
-            }`}
-          >
-            <span className="flex items-center gap-1.5">
-              <Star size={14} weight="fill" aria-hidden /> Mis búsquedas
-              {loaded && saved.length > 0 ? ` (${saved.length})` : ""}
-            </span>
-            <span className="text-xs font-semibold opacity-80">
-              {filtering ? "activado" : "filtrar"}
-            </span>
-          </button>
-
-          {!offline && browseVisible.length === 0 && (
-            <div className="card-ticket p-6 text-center" style={{ "--i": 0 } as React.CSSProperties}>
-              <Basket aria-hidden size={44} className="mx-auto text-ink-soft" weight="duotone" />
-              <p className="mt-2 font-display text-xl">
-                {filtering && saved.length === 0 ? "Sin búsquedas guardadas" : "Nada reportado aquí aún"}
-              </p>
-              <p className="mx-auto mt-1 max-w-xs text-sm text-ink-soft">
-                {filtering && saved.length === 0
-                  ? "Toca la estrella de un producto para seguirlo."
-                  : "Lo reportado pasa a «Hay (no seguro)» tras 24 horas. Sé quien encienda la zona."}
-              </p>
-            </div>
-          )}
-
-          {[...byZone.entries()].map(([zone, zoneRows]) => (
-            <section key={zone} className="space-y-2">
-              <h2 className="flex items-center gap-3">
-                <span className="font-display text-lg leading-none">{zone}</span>
-                <span aria-hidden className="h-0.5 flex-1 bg-line" />
-                <span className="text-xs font-bold text-ink-soft">{zoneRows.length}</span>
-              </h2>
-              <ul className="card-ticket divide-y-2 divide-dashed divide-line overflow-hidden">
-                {zoneRows.map((row, i) => (
-                  <li key={row.store_id + row.product_slug}>
-                    <TicketRow
-                      row={row}
-                      index={i}
-                      saved={saved}
-                      onToggleSave={toggleSave}
-                    />
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
-        </>
-      )}
-          </>
-        )}
 
       {/* --- FAB Reportar ---------------------------------------------------- */}
       <Link
@@ -983,132 +723,5 @@ export default function HomeView({
         <PlusCircle weight="fill" size={28} aria-hidden />
       </Link>
     </div>
-  );
-}
-
-// Acciones de marcado rapido de una fila de busqueda: crean un reporte NUEVO
-// (a diferencia de VoteButtons, que confirma un reporte existente).
-function QuickMarkLine({
-  row,
-  mark,
-  onMark,
-}: {
-  row: SearchRow;
-  mark?: MarkState;
-  onMark: (r: SearchRow, availability: "available" | "out_of_stock") => void;
-}) {
-  // Etiqueta contextual: si hoy figura "Ya no hay", el positivo reabre.
-  const yesLabel = row.status === "out" ? "Hay de nuevo" : "Aún hay";
-  const yesAria = `Reportar que ${row.status === "out" ? "hay de nuevo" : "aún hay"} ${row.product_name} en ${row.store_name}`;
-
-  return (
-    <div className="mt-2 flex flex-wrap items-center gap-2">
-      {mark?.phase === "done" ? (
-        <span className="stamp stamp--flat stamp-hay text-xs">Reportado ✓</span>
-      ) : mark?.phase === "sending" ? (
-        <span className="flex items-center gap-1 text-xs font-semibold text-ink-soft">
-          <Spinner weight="bold" className="animate-spin" size={12} aria-hidden />
-          Enviando…
-        </span>
-      ) : (
-        <>
-          <button
-            type="button"
-            aria-label={yesAria}
-            onClick={() => onMark(row, "available")}
-            className="btn btn-ghost rounded-full px-2.5 py-0.5 text-xs font-bold text-hay-ink"
-          >
-            <Check size={12} weight="bold" aria-hidden />
-            {yesLabel}
-          </button>
-          <button
-            type="button"
-            aria-label={`Reportar que ya no hay ${row.product_name} en ${row.store_name}`}
-            onClick={() => onMark(row, "out_of_stock")}
-            className="btn btn-ghost rounded-full px-2.5 py-0.5 text-xs font-bold text-nohay-ink"
-          >
-            <X size={12} weight="bold" aria-hidden />
-            Ya no hay
-          </button>
-          {mark?.phase === "error" && (
-            <span className="text-xs font-semibold text-nohay-ink">{mark.msg}</span>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-
-type RowProps = {
-  row: HomeRow;
-  index: number;
-  saved: string[];
-  onToggleSave: (slug: string) => void;
-};
-
-function TicketRow({ row, index, saved, onToggleSave }: RowProps) {
-  const available = row.availability === "available";
-  const isSaved = saved.includes(row.product_slug);
-
-  return (
-    <article className="rise p-3" style={{ "--i": index } as React.CSSProperties}>
-      <div className="flex items-start gap-3">
-        <button
-          type="button"
-          aria-label={
-            isSaved
-              ? `Quitar ${row.product_name} de búsquedas`
-              : `Guardar ${row.product_name} en búsquedas`
-          }
-          aria-pressed={isSaved}
-          onClick={() => onToggleSave(row.product_slug)}
-          className="transition-transform hover:scale-110"
-        >
-          <Star
-            size={22}
-            weight={isSaved ? "fill" : "regular"}
-            className={isSaved ? "text-accent" : "text-ink-soft"}
-            aria-hidden
-          />
-        </button>
-
-        <ProductIcon slug={row.product_slug} size={30} className="mt-0.5 shrink-0 text-ink" />
-
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold leading-snug">
-            <Link href={`/producto/${row.product_slug}`} className="hover:underline">
-              {row.product_name}
-            </Link>
-          </p>
-          <p className="truncate text-xs text-ink-soft">{row.store_name}</p>
-          <p className="mt-0.5 text-xs text-ink-soft">
-            <RelativeTime date={row.last_seen_at} />
-            {row.reporter_count > 1 && ` · ✓ ${row.reporter_count}`}
-            {row.queue_level && (
-              <span className="ml-1 font-semibold text-ink">{queueLabel(row.queue_level)}</span>
-            )}
-          </p>
-        </div>
-
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          {available && row.price_from !== null && (
-            <span className="font-display text-xl leading-none text-ink">
-              {formatPrice(row.price_from)}
-            </span>
-          )}
-          <span
-            className={`stamp text-sm ${available ? "stamp-hay -rotate-2" : "stamp-nohay rotate-2"}`}
-          >
-            {available ? "Hay" : "No hay"}
-          </span>
-        </div>
-      </div>
-
-      <div className="mt-2 flex items-center gap-2">
-        <span className="text-xs text-ink-soft">¿Lo confirmas?</span>
-        <VoteButtons reportId={row.latest_report_id} />
-      </div>
-    </article>
   );
 }
