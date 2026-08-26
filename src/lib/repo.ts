@@ -1,5 +1,7 @@
 import { query } from "./db";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export type Availability = "available" | "out_of_stock";
 
 export type AvailabilityRow = {
@@ -100,6 +102,173 @@ export async function submitReport(input: SubmitReportInput): Promise<SubmitRepo
     ],
   );
   return rows[0].result;
+}
+
+// --- Capa place-first: RPCs aditivos junto a los de tienda (superficie rollback) ---
+
+export type SubmitPlaceReportInput = {
+  productId: string;
+  deviceHash: string;
+  availability: Availability;
+  /** Lugar existente; alternativamente pin lat+lng (XOR validado en intake). */
+  placeId?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  label?: string | null;
+  priceCup?: number | null;
+  comment?: string | null;
+  queueLevel?: number | null;
+};
+
+/** Mismo orden posicional que public.submit_place_report (10 args). */
+export async function submitPlaceReport(
+  input: SubmitPlaceReportInput,
+): Promise<SubmitReportResult> {
+  const { rows } = await query<{ result: SubmitReportResult }>(
+    "select public.submit_place_report($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) as result",
+    [
+      input.productId,
+      input.deviceHash,
+      input.availability,
+      input.placeId ?? null,
+      input.lat ?? null,
+      input.lng ?? null,
+      input.label ?? null,
+      input.priceCup ?? null,
+      input.comment ?? null,
+      input.queueLevel ?? null,
+    ],
+  );
+  return rows[0].result;
+}
+
+export type ParsedReportIntake = {
+  productId: string;
+  availability: Availability;
+  placeId: string | null;
+  lat: number | null;
+  lng: number | null;
+  label: string | null;
+  priceCup: number | null;
+  comment: string | null;
+  queueLevel: number | null;
+};
+
+/**
+ * Normaliza y valida el cuerpo de POST /api/reports.
+ * Ubicacion: {placeId} XOR {lat,lng}. El campo legado storeId se aliasa a
+ * placeId (los lugares heredan los UUID de tiendas, D3/D6) para que las
+ * colas offline de bundles viejos drenen sin cambios.
+ */
+export function parseReportIntake(
+  body: Record<string, unknown>,
+): { ok: true; value: ParsedReportIntake } | { ok: false; error: string } {
+  const productId = typeof body.productId === "string" ? body.productId : "";
+  const availability =
+    body.availability === "available" || body.availability === "out_of_stock"
+      ? (body.availability as Availability)
+      : null;
+  if (!productId || !availability) return { ok: false, error: "invalid_input" };
+
+  // D6: alias legado; un placeId explicito siempre gana.
+  const rawPlace =
+    typeof body.placeId === "string"
+      ? body.placeId
+      : typeof body.storeId === "string"
+        ? body.storeId
+        : "";
+  const placeId = UUID_RE.test(rawPlace) ? rawPlace : "";
+
+  const toCoord = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.round(n * 1e6) / 1e6 : null;
+  };
+  const lat = toCoord(body.lat);
+  const lng = toCoord(body.lng);
+
+  // XOR estricto: lugar existente O pin completo, nunca ambos ni ninguno.
+  if (placeId && (lat !== null || lng !== null)) {
+    return { ok: false, error: "invalid_input" };
+  }
+  if (!placeId && (lat === null || lng === null)) {
+    return { ok: false, error: "invalid_input" };
+  }
+
+  const label =
+    typeof body.label === "string" && body.label.trim().length > 0
+      ? body.label.trim().slice(0, 80)
+      : null;
+
+  let priceCup: number | null = null;
+  if (body.priceCup !== null && body.priceCup !== undefined && body.priceCup !== "") {
+    const n = Number(body.priceCup);
+    if (!Number.isFinite(n) || n < 0 || n > 1000000) {
+      return { ok: false, error: "invalid_price" };
+    }
+    priceCup = Math.round(n);
+  }
+
+  const comment =
+    typeof body.comment === "string" && body.comment.trim().length > 0
+      ? body.comment.trim().slice(0, 200)
+      : null;
+
+  let queueLevel: number | null = null;
+  if (body.queueLevel !== null && body.queueLevel !== undefined && body.queueLevel !== "") {
+    const q = Number(body.queueLevel);
+    if (!Number.isInteger(q) || q < 1 || q > 3) {
+      return { ok: false, error: "invalid_queue" };
+    }
+    queueLevel = q;
+  }
+
+  return {
+    ok: true,
+    value: {
+      productId,
+      availability,
+      placeId: placeId || null,
+      lat,
+      lng,
+      label,
+      priceCup,
+      comment,
+      queueLevel,
+    },
+  };
+}
+
+/** Busqueda place-first: filas con nombres legados intactos (D5). */
+export async function searchPlaces(
+  q: string | null,
+  lat: number,
+  lng: number,
+  radius: number,
+  maxPrice: number | null,
+  confirmedOnly: boolean,
+) {
+  const { rows } = await query(
+    `select * from public.search_place_availability($1,$2::float8,$3::float8,$4::int,$5::int,$6::bool)`,
+    [q ?? "", lat, lng, radius, maxPrice, confirmedOnly],
+  );
+  return rows;
+}
+
+export type PlaceSummary = {
+  id: string;
+  label: string;
+  barrio: string | null;
+  municipio: string | null;
+};
+
+export async function getPlaceById(id: string) {
+  if (!UUID_RE.test(id)) return null;
+  const { rows } = await query<PlaceSummary>(
+    `select id, label, barrio, municipio from public.places where id = $1 and active = true`,
+    [id],
+  );
+  return rows[0] ?? null;
 }
 
 export type StoreSummary = {

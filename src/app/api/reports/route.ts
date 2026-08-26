@@ -1,75 +1,47 @@
 import { NextResponse } from "next/server";
-import { submitReport, type Availability } from "@/lib/repo";
+import { parseReportIntake, submitPlaceReport } from "@/lib/repo";
 import { hashDeviceId } from "@/lib/device-hash";
 
 export const dynamic = "force-dynamic";
 
-type Body = {
-  storeId?: unknown;
-  productId?: unknown;
-  availability?: unknown;
-  priceCup?: unknown;
-  comment?: unknown;
-  queueLevel?: unknown;
-};
-
+/**
+ * Intake place-first: {placeId} XOR {lat,lng(+label?)}. El campo legado
+ * storeId se aliasa a placeId dentro de parseReportIntake (D6). El guardia
+ * anti-duplicado (30 min device+lugar+producto) vive DENTRO de
+ * submit_place_report; aqui no hay chequeo de ruta que pueda divergir.
+ */
 export async function POST(req: Request) {
   const deviceHash = hashDeviceId(req.headers.get("x-device-id"));
   if (!deviceHash) {
     return NextResponse.json({ ok: false, error: "invalid_device" }, { status: 400 });
   }
 
-  let body: Body;
+  let body: Record<string, unknown>;
   try {
-    body = (await req.json()) as Body;
+    body = (await req.json()) as Record<string, unknown>;
   } catch {
     return NextResponse.json({ ok: false, error: "invalid_body" }, { status: 400 });
   }
 
-  const storeId = typeof body.storeId === "string" ? body.storeId : "";
-  const productId = typeof body.productId === "string" ? body.productId : "";
-  const availability =
-    body.availability === "available" || body.availability === "out_of_stock"
-      ? (body.availability as Availability)
-      : null;
-  if (!storeId || !productId || !availability) {
-    return NextResponse.json({ ok: false, error: "invalid_input" }, { status: 400 });
+  const parsed = parseReportIntake(body);
+  if (!parsed.ok) {
+    return NextResponse.json({ ok: false, error: parsed.error }, { status: 400 });
   }
 
-  let priceCup: number | null = null;
-  if (body.priceCup !== null && body.priceCup !== undefined && body.priceCup !== "") {
-    const n = Number(body.priceCup);
-    if (!Number.isFinite(n) || n < 0 || n > 1000000) {
-      return NextResponse.json({ ok: false, error: "invalid_price" }, { status: 400 });
-    }
-    priceCup = Math.round(n);
-  }
-
-  const comment =
-    typeof body.comment === "string" && body.comment.trim().length > 0
-      ? body.comment.trim().slice(0, 200)
-      : null;
-
-  let queueLevel: number | null = null;
-  if (body.queueLevel !== null && body.queueLevel !== undefined && body.queueLevel !== "") {
-    const q = Number(body.queueLevel);
-    if (!Number.isInteger(q) || q < 1 || q > 3) {
-      return NextResponse.json({ ok: false, error: "invalid_queue" }, { status: 400 });
-    }
-    queueLevel = q;
-  }
-
-  // The DB function returns a verdict for every expected condition
-  // (rate limits, duplicates); only infrastructure errors throw.
+  // La funcion DB devuelve veredicto para toda condicion esperada
+  // (rate limits, duplicados); solo errores de infraestructura lanzan.
   try {
-    const result = await submitReport({
-      storeId,
-      productId,
-      availability,
-      priceCup,
-      comment,
+    const result = await submitPlaceReport({
+      productId: parsed.value.productId,
+      availability: parsed.value.availability,
+      placeId: parsed.value.placeId,
+      lat: parsed.value.lat,
+      lng: parsed.value.lng,
+      label: parsed.value.label,
+      priceCup: parsed.value.priceCup,
+      comment: parsed.value.comment,
+      queueLevel: parsed.value.queueLevel,
       deviceHash,
-      queueLevel,
     });
     return NextResponse.json(result);
   } catch {

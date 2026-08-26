@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { searchPlaces } from "@/lib/repo";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Product-centric search anchored on the user's position.
+ * Busqueda place-first sobre search_place_availability. Envelope y params
+ * identicos al contrato anterior; las filas conservan los nombres legados
+ * (store_id/store_name llevando valores de lugar, D5) para que bundles
+ * PWA viejos sigan renderizando.
  * GET /api/search?q=pollo&lat=23.12&lng=-82.38&radius=3000&maxPrice=&confirmedOnly=0
  */
 export async function GET(req: Request) {
@@ -21,16 +24,13 @@ export async function GET(req: Request) {
   }
 
   try {
-    const { rows } = await query(
-      `select * from public.search_availability($1,$2::float8,$3::float8,$4::int,$5::int,$6::bool)`,
-      [
-        q,
-        lat,
-        lng,
-        radius,
-        Number.isFinite(maxPriceRaw) && maxPriceRaw > 0 ? Math.round(maxPriceRaw) : null,
-        confirmedOnly,
-      ],
+    const rows = await searchPlaces(
+      q,
+      lat,
+      lng,
+      radius,
+      Number.isFinite(maxPriceRaw) && maxPriceRaw > 0 ? Math.round(maxPriceRaw) : null,
+      confirmedOnly,
     );
     return NextResponse.json({ ok: true, rows });
   } catch {
