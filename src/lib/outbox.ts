@@ -4,8 +4,15 @@ import type { Availability } from "./repo-types";
 
 export type OutboxEntry = {
   id: string;
-  storeId: string;
-  storeName: string;
+  /** Lugar ancla (era places): los envios nuevos siempre traen placeId. */
+  placeId?: string;
+  placeName?: string | null;
+  /**
+   * @deprecated Era tiendas: las entradas viejas en IndexedDB solo traen
+   * estos campos y drenan porque /api/reports aliasa storeId -> placeId (D6).
+   */
+  storeId?: string;
+  storeName?: string;
   productId: string;
   productName: string;
   availability: Availability;
@@ -98,7 +105,9 @@ export async function flushOutbox(deviceId: string): Promise<void> {
           "x-device-id": deviceId,
         },
         body: JSON.stringify({
-          storeId: entry.storeId,
+          // Era places envia placeId; las entradas legadas caen a storeId,
+          // que /api/reports aliasa a placeId (D6).
+          placeId: entry.placeId ?? entry.storeId,
           productId: entry.productId,
           availability: entry.availability,
           priceCup: entry.priceCup,
@@ -117,7 +126,7 @@ export async function flushOutbox(deviceId: string): Promise<void> {
       } else if (data.error === "rate_limit_interval") {
         break; // too fast; try again next flush
       } else {
-        // unknown_store/unknown_product -> drop silently, never blocks the user
+        // unknown_place/unknown_product -> drop silently, never blocks the user
         await outboxRemove(entry.id);
       }
     } catch {

@@ -440,12 +440,14 @@ export default function HomeView({
   const searchPoints: MapPoint[] = useMemo(() => {
     if (!visibleResults) return [];
     return visibleResults.map((r) => ({
-      store_id: r.store_id,
+      // Nombres legados del wire (D5): store_id/store_name ya traen el
+      // uuid/etiqueta del place.
+      place_id: r.store_id,
       lat: r.lat,
       lng: r.lng,
       slug: r.product_slug,
       product_name: r.product_name,
-      store_name: r.store_name,
+      place_label: r.store_name,
       barrio: r.barrio,
       status: r.status,
       price_from: r.price_from,
@@ -464,8 +466,9 @@ export default function HomeView({
     markingRef.current.add(r.store_id);
     setMarks((prev) => ({ ...prev, [r.store_id]: { phase: "sending" } }));
     const res = await quickMarkReport({
-      storeId: r.store_id,
-      storeName: r.store_name,
+      // Fila de busqueda: store_id/store_name son legados (D5) y llevan place.
+      placeId: r.store_id,
+      placeName: r.store_name,
       productSlug: r.product_slug,
       productName: r.product_name,
       availability,

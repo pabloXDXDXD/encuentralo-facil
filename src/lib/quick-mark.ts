@@ -11,8 +11,9 @@ const ERROR_MSG: Record<string, string> = {
 };
 
 export type QuickMarkInput = {
-  storeId: string;
-  storeName: string;
+  /** Uuid del lugar ancla (places): la era places nunca escribe store_id. */
+  placeId: string;
+  placeName: string;
   productSlug: string;
   productName: string;
   availability: Availability;
@@ -49,9 +50,10 @@ async function loadProductIndex(): Promise<Map<string, CatalogProduct>> {
 
 /**
  * Marcado rapido: crea un NUEVO reporte reusando el mismo pipeline que
- * ReportFlow (mismos headers con x-device-id, mismo payload, misma cola
- * offline y mismas reglas de reintento). priceCup/comment/queueLevel van
- * null: la via rapida no los pide.
+ * ReportFlow (mismos headers con x-device-id, misma cola offline y mismas
+ * reglas de reintento). priceCup/comment/queueLevel van null: la via rapida
+ * no los pide. El payload es place-first ({placeId}); los envios legados con
+ * {storeId} siguen drenando porque /api/reports aliasa el campo (D6).
  */
 export async function quickMarkReport(input: QuickMarkInput): Promise<QuickMarkResult> {
   let productId: string | null = null;
@@ -65,7 +67,7 @@ export async function quickMarkReport(input: QuickMarkInput): Promise<QuickMarkR
   }
 
   const payload = {
-    storeId: input.storeId,
+    placeId: input.placeId,
     productId,
     availability: input.availability,
     priceCup: null,
@@ -106,13 +108,13 @@ export async function quickMarkReport(input: QuickMarkInput): Promise<QuickMarkR
 }
 
 async function enqueue(
-  payload: { storeId: string; productId: string; availability: Availability },
+  payload: { placeId: string; productId: string; availability: Availability },
   input: QuickMarkInput,
 ) {
   await outboxAdd({
     id: crypto.randomUUID(),
-    storeId: payload.storeId,
-    storeName: input.storeName,
+    placeId: payload.placeId,
+    placeName: input.placeName,
     productId: payload.productId,
     productName: input.productName,
     availability: payload.availability,

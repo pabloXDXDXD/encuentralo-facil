@@ -38,15 +38,17 @@ type Props = {
    */
   countryView?: boolean;
   /**
-   * Plain tappable store markers (report-flow store picker). No clusters,
-   * no availability popups: clicking a pin calls onStorePinSelect.
+   * @deprecated Era tiendas: selector de tienda del flujo viejo de ReportFlow.
+   * Muere con el flujo unico (WU7); no usar en componentes nuevos.
    */
   storePins?: StorePin[];
+  /** @deprecated Pareja de storePins; mismo ciclo de vida. */
   onStorePinSelect?: (store: { id: string; name: string }) => void;
   /** Appends a "Reportar aqui" link to every availability popup. */
   popupReportLink?: boolean;
 };
 
+/** @deprecated Era tiendas: ver Props.storePins. */
 export type StorePin = {
   id: string;
   name: string;
@@ -72,13 +74,19 @@ export type HomeRowLike = {
   status?: string | null;
 };
 
+/**
+ * Punto place-first del mapa. La fila de busqueda trae los valores bajo los
+ * nombres legados store_id/store_name (D5), pero ya son uuid/etiqueta de
+ * places; la etiqueta puede ser generada ("Punto en ...") cuando nadie nombro
+ * el lugar.
+ */
 export type MapPoint = {
-  store_id: string;
+  place_id: string;
   lat: number;
   lng: number;
   slug: string;
   product_name: string;
-  store_name: string;
+  place_label: string;
   barrio: string;
   status: "confirmed" | "stale" | "out" | "unknown";
   price_from: number | null;
@@ -113,14 +121,14 @@ const STATUS_ORDER: MapPoint["status"][] = ["confirmed", "stale", "out", "unknow
 
 type InternalPoint = {
   key: string;
-  storeId: string;
+  placeId: string;
   lat: number;
   lng: number;
   cls: string;
   statusKey: MapPoint["status"];
   glyphSlug: string;
   productName: string;
-  storeName: string;
+  placeLabel: string;
   barrio: string;
   priceFrom: number | null;
   reporterCount: number;
@@ -192,14 +200,14 @@ function escAttr(value: string): string {
     .replace(/>/g, "&gt;");
 }
 
-// Marcado rapido en curso por tienda+producto: ignora toques repetidos
+// Marcado rapido en curso por lugar+producto: ignora toques repetidos
 // aunque el popup se haya cerrado y reabierto durante el envio.
 const busyMarks = new Set<string>();
 
 async function handlePopupMark(btn: HTMLElement) {
   const d = btn.dataset;
-  const key = `${d.storeId}:${d.productSlug}`;
-  if (!d.storeId || !d.productSlug || !d.status || busyMarks.has(key)) return;
+  const key = `${d.placeId}:${d.productSlug}`;
+  if (!d.placeId || !d.productSlug || !d.status || busyMarks.has(key)) return;
   busyMarks.add(key);
 
   // Deshabilitar ambos botones del popup mientras vuela el envio.
@@ -209,8 +217,8 @@ async function handlePopupMark(btn: HTMLElement) {
   });
 
   const res = await quickMarkReport({
-    storeId: d.storeId,
-    storeName: d.storeName ?? "",
+    placeId: d.placeId,
+    placeName: d.placeName ?? "",
     productSlug: d.productSlug,
     productName: d.productName ?? "",
     availability: d.status === "out_of_stock" ? "out_of_stock" : "available",
@@ -359,19 +367,19 @@ export default function AvailabilityMap({
       let internal: InternalPoint[] = [];
 
       if (storePins) {
-        // Store-picker mode: coords only, no availability semantics.
+        // Store-picker mode (deprecado, ver Props): coords only, no availability semantics.
         internal = storePins
           .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng))
           .map((s) => ({
             key: s.id,
-            storeId: s.id,
+            placeId: s.id,
             lat: s.lat,
             lng: s.lng,
             cls: "",
             statusKey: "unknown" as MapPoint["status"],
             glyphSlug: "",
             productName: s.name,
-            storeName: s.name,
+            placeLabel: s.name,
             barrio: s.barrio,
             priceFrom: null,
             reporterCount: 0,
@@ -384,18 +392,20 @@ export default function AvailabilityMap({
         internal = points
           .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
           .map((p) => ({
-          key: p.store_id + p.slug + p.status,
-          storeId: p.store_id,
+          key: p.place_id + p.slug + p.status,
+          placeId: p.place_id,
           lat: p.lat,
           lng: p.lng,
           cls: STATUS_CLASS[p.status],
           statusKey: p.status,
           glyphSlug: p.slug,
           productName: p.product_name,
-          storeName: p.store_name,
+          placeLabel: p.place_label,
           barrio: p.barrio,
           priceFrom: p.price_from,
-          reporterCount: p.reporter_count,
+          // El wire trae reporter_count como string (bigint de Postgres):
+          // coercion numerica para que la pluralizacion (=== 1) funcione.
+          reporterCount: Number(p.reporter_count),
           lastSeenAt: p.last_seen_at,
           badge: STATUS_BADGE[p.status],
         }));
@@ -416,17 +426,18 @@ export default function AvailabilityMap({
                   : "unknown";
           internal.push({
             key: r.store_id + r.product_slug,
-            storeId: r.store_id,
+            // Nombres legados del snapshot (D5): los valores ya son de places.
+            placeId: r.store_id,
             lat: Number(r.lat),
             lng: Number(r.lng),
             cls: STATUS_CLASS[st],
             statusKey: st,
             glyphSlug: r.product_slug,
             productName: r.product_name,
-            storeName: r.store_name,
+            placeLabel: r.store_name,
             barrio: r.barrio,
             priceFrom: r.price_from,
-            reporterCount: r.reporter_count,
+            reporterCount: Number(r.reporter_count),
             lastSeenAt: r.last_seen_at,
             badge: STATUS_BADGE[st],
           });
@@ -440,12 +451,12 @@ export default function AvailabilityMap({
         for (const p of internal) {
           const icon = L.divIcon({
             className: "",
-            html: `<div class="map-pin map-pin--store" title="${p.storeName}">${glyph}</div>`,
+            html: `<div class="map-pin map-pin--store" title="${p.placeLabel}">${glyph}</div>`,
             iconSize: [32, 32],
             iconAnchor: [16, 16],
           });
           const marker = L.marker([p.lat, p.lng], { icon });
-          marker.on("click", () => onStorePinSelect?.({ id: p.storeId, name: p.storeName }));
+          marker.on("click", () => onStorePinSelect?.({ id: p.placeId, name: p.placeLabel }));
           marker.addTo(map);
         }
       } else {
@@ -490,26 +501,33 @@ export default function AvailabilityMap({
             p.priceFrom !== null && p.priceFrom !== undefined
               ? `<div class="popup-price">$${p.priceFrom}</div>`
               : "";
+          // Meta del ticket: hace cuanto se vio y cuantas confirmaciones
+          // acumula el lugar para este producto (spec map-first-ui).
           const meta =
             p.lastSeenAt != null
-              ? `${timeAgo(p.lastSeenAt)}${p.reporterCount > 1 ? ` · ${p.reporterCount} reportes` : ""}`
+              ? `${timeAgo(p.lastSeenAt)} · ${p.reporterCount} ${
+                  p.reporterCount === 1 ? "confirmación" : "confirmaciones"
+                }`
               : "sin reportes recientes";
           const reportLink = popupReportLink
-            ? `<a class="popup-report" href="/reportar?store=${p.storeId}">${reportLinkGlyph()}<span>Reportar aquí</span></a>`
+            ? `<a class="popup-report" href="/reportar?store=${p.placeId}">${reportLinkGlyph()}<span>Reportar aquí</span></a>`
             : "";
           // Marcado rapido: dos acciones que crean un reporte NUEVO sin salir
-          // del popup (delegacion de clicks via onPopupClick).
+          // del popup (delegacion de clicks via onPopupClick). Anclan al place.
           const yesLabel = p.statusKey === "out" ? "Hay de nuevo" : "Aún hay";
           const marks = `
               <div class="popup-marks">
-                <button type="button" class="popup-mark popup-mark--yes" data-store-id="${p.storeId}" data-product-slug="${escAttr(p.glyphSlug)}" data-store-name="${escAttr(p.storeName)}" data-product-name="${escAttr(p.productName)}" data-status="available" aria-label="Reportar que ${p.statusKey === "out" ? "hay de nuevo" : "aún hay"} ${escAttr(p.productName)} en ${escAttr(p.storeName)}">${markYesGlyph()}<span>${yesLabel}</span></button>
-                <button type="button" class="popup-mark popup-mark--no" data-store-id="${p.storeId}" data-product-slug="${escAttr(p.glyphSlug)}" data-store-name="${escAttr(p.storeName)}" data-product-name="${escAttr(p.productName)}" data-status="out_of_stock" aria-label="Reportar que ya no hay ${escAttr(p.productName)} en ${escAttr(p.storeName)}">${markNoGlyph()}<span>Ya no hay</span></button>
+                <button type="button" class="popup-mark popup-mark--yes" data-place-id="${p.placeId}" data-product-slug="${escAttr(p.glyphSlug)}" data-place-name="${escAttr(p.placeLabel)}" data-product-name="${escAttr(p.productName)}" data-status="available" aria-label="Reportar que ${p.statusKey === "out" ? "hay de nuevo" : "aún hay"} ${escAttr(p.productName)} en ${escAttr(p.placeLabel)}">${markYesGlyph()}<span>${yesLabel}</span></button>
+                <button type="button" class="popup-mark popup-mark--no" data-place-id="${p.placeId}" data-product-slug="${escAttr(p.glyphSlug)}" data-place-name="${escAttr(p.placeLabel)}" data-product-name="${escAttr(p.productName)}" data-status="out_of_stock" aria-label="Reportar que ya no hay ${escAttr(p.productName)} en ${escAttr(p.placeLabel)}">${markNoGlyph()}<span>Ya no hay</span></button>
               </div>`;
+          // Ticket enriquecido: el LUGAR manda (titular + stamp de estado),
+          // el producto va debajo; precio, tiempo y confirmaciones completan.
           const html = `
             <div class="popup-ticket">
-              <div class="popup-name"><span>${p.productName}</span><span class="stamp ${STATUS_STAMP[p.statusKey]} stamp--flat" style="font-size:10px;padding:0 4px;">${p.badge}</span></div>
+              <div class="popup-name"><span>${escAttr(p.placeLabel)}</span><span class="stamp ${STATUS_STAMP[p.statusKey]} stamp--flat" style="font-size:10px;padding:0 4px;">${p.badge}</span></div>
+              <div class="popup-product">${escAttr(p.productName)}</div>
               ${price}
-              <div class="popup-meta">${p.storeName}<br/>${p.barrio} · ${meta}</div>
+              <div class="popup-meta">${escAttr(p.barrio)} · ${meta}</div>
               ${marks}
               ${reportLink}
             </div>`;

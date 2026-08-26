@@ -395,6 +395,13 @@ a:focus-visible {
   align-items: baseline;
 }
 
+/* Producto bajo el titular del lugar (popups enriquecidos place-first). */
+.popup-ticket .popup-product {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink);
+}
+
 .popup-ticket .popup-price {
   font-family: "Anton", "Arial Narrow", Impact, sans-serif;
   text-transform: uppercase;
