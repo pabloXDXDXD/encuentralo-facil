@@ -619,6 +619,13 @@ export default function AvailabilityMap({
           map.setView(pickCenter, 12, { animate: false });
           return;
         }
+        // Browse sin busqueda activa: si hay ancla del usuario, la camara ES
+        // SU punto elegido (recien pickeado o guardado) — nunca el centroide
+        // del municipio ni un fitBounds de pines.
+        if (!points && anchor) {
+          map.setView([anchor.lat, anchor.lng], DEFAULT_RADIUS_ZOOM, { animate: false });
+          return;
+        }
         const mc = focusMunicipio ? MUNICIPIO_CENTERS[focusMunicipio] : undefined;
         if (mc && !points) {
           map.setView([mc.lat, mc.lng], 14, { animate: false });

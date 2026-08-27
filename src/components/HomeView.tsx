@@ -728,12 +728,13 @@ export default function HomeView({
           popupReportLink
         />
       ) : (
+        // Sin busqueda activa: el mapa muestra SOLO el ancla del usuario.
+        // Los pines browse (snapshot sin producto buscado) confundian: el
+        // usuario espera pines unicamente tras buscar un producto.
         <AvailabilityMapDynamic
-          rows={rowsState}
           focusMunicipio={activeMunicipio}
           focusProvincia={activeProvincia}
           anchor={anchor}
-          popupReportLink
         />
       )}
 
