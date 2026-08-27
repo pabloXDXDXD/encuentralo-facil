@@ -40,5 +40,8 @@ playwright-report/
 
 # Local test artifacts
 shot-*.png
+cap-*.png
+test-*.png
+.codegraph/
 sizes.txt
 *.tsbuildinfo
