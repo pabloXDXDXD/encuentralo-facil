@@ -466,6 +466,8 @@ export default function HomeView({
           </button>
         </div>
         <AvailabilityMapDynamic
+          focusMunicipio={activeMunicipio}
+          focusProvincia={activeProvincia}
           pickMode
           onPick={onAnchorPicked}
           anchor={anchor}

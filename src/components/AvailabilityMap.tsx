@@ -13,7 +13,7 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import type { Map as LeafletMap } from "leaflet";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Check, Crosshair, MapPin, Plus, Question, X } from "@phosphor-icons/react";
-import { MUNICIPIO_CENTERS, regionFor } from "@/lib/geo";
+import { MUNICIPIO_CENTERS, REGIONS, regionFor } from "@/lib/geo";
 import { ProductIcon } from "@/lib/product-icons";
 import { timeAgo } from "@/lib/format";
 import { quickMarkReport } from "@/lib/quick-mark";
@@ -136,6 +136,30 @@ const LEGEND_META: Record<
 /** Orden canonico de los estados; un grupo de clusters por cada uno. */
 const STATUS_ORDER: MapPoint["status"][] = ["confirmed", "stale", "out", "unknown"];
 
+type BrowseRow = NonNullable<Props["rows"]>[number];
+
+/** Estado del pin para una fila del snapshot browse. */
+function browseStatus(r: BrowseRow): MapPoint["status"] {
+  return r.availability === "available"
+    ? "confirmed"
+    : r.status === "habia"
+      ? "stale"
+      : r.status === "ya_no_hay"
+        ? "out"
+        : "unknown";
+}
+
+/** Mejor disponibilidad primero; desempate por precio mas bajo. */
+const BROWSE_RANK: Record<MapPoint["status"], number> = {
+  confirmed: 0,
+  stale: 1,
+  unknown: 2,
+  out: 3,
+};
+
+/** Fallback urbano para elegir punto sin provincia conocida (zona seed). */
+const PICK_FALLBACK_CENTER: [number, number] = [23.12, -82.38];
+
 type InternalPoint = {
   key: string;
   placeId: string;
@@ -151,6 +175,8 @@ type InternalPoint = {
   reporterCount: number;
   lastSeenAt: string | null;
   badge: string;
+  /** Browse: cuantas filas de producto se agregaron en este lugar. */
+  placeVariants?: number;
 };
 
 const glyphCache = new Map<string, string>();
@@ -175,6 +201,16 @@ function productGlyph(slug: string): string {
   if (html === undefined) {
     html = renderToStaticMarkup(<ProductIcon slug={slug} size={15} />);
     glyphCache.set(slug, html);
+  }
+  return html;
+}
+
+/** Glifo generico de lugar para pines browse sin producto activo. */
+function placeGlyph(): string {
+  let html = glyphCache.get("__place__");
+  if (html === undefined) {
+    html = renderToStaticMarkup(<MapPin weight="fill" size={13} />);
+    glyphCache.set("__place__", html);
   }
   return html;
 }
@@ -410,29 +446,40 @@ export default function AvailabilityMap({
           badge: STATUS_BADGE[p.status],
         }));
       } else {
-        const browseRows = rows ?? [];
-        for (const r of browseRows) {
-          // Sin coordenadas no hay nada que dibujar: se excluyen de la vista.
+        // UN pin por LUGAR en browse (paradigma place-era): el snapshot trae
+        // filas por lugar+producto y sin busqueda activa los productos sobran.
+        // Gana la fila de mejor disponibilidad y, a igualdad, mas barata.
+        const byPlace = new Map<string, { winner: BrowseRow; variants: number }>();
+        for (const r of rows ?? []) {
           if (r.lat === null || r.lng === null) continue;
-          // Browse muestra TODOS los estados: el estado del ultimo reporte
-          // decide la clase del pin (Hay / Habia / Ya no hay / Sin datos).
-          const st: MapPoint["status"] =
-            r.availability === "available"
-              ? "confirmed"
-              : r.status === "habia"
-                ? "stale"
-                : r.status === "ya_no_hay"
-                  ? "out"
-                  : "unknown";
+          const g = byPlace.get(r.store_id);
+          if (!g) {
+            byPlace.set(r.store_id, { winner: r, variants: 1 });
+            continue;
+          }
+          g.variants += 1;
+          const w = g.winner;
+          const rankR = BROWSE_RANK[browseStatus(r)];
+          const rankW = BROWSE_RANK[browseStatus(w)];
+          if (
+            rankR < rankW ||
+            (rankR === rankW && (r.price_from ?? Infinity) < (w.price_from ?? Infinity))
+          ) {
+            g.winner = r;
+          }
+        }
+        for (const { winner: r, variants } of byPlace.values()) {
+          const st = browseStatus(r);
           internal.push({
-            key: r.store_id + r.product_slug,
+            key: r.store_id,
             // Nombres legados del snapshot (D5): los valores ya son de places.
             placeId: r.store_id,
             lat: Number(r.lat),
             lng: Number(r.lng),
             cls: STATUS_CLASS[st],
             statusKey: st,
-            glyphSlug: r.product_slug,
+            // Sin producto activo: glifo generico de lugar y popup resumido.
+            glyphSlug: "",
             productName: r.product_name,
             placeLabel: r.store_name,
             barrio: r.barrio,
@@ -440,6 +487,7 @@ export default function AvailabilityMap({
             reporterCount: Number(r.reporter_count),
             lastSeenAt: r.last_seen_at,
             badge: STATUS_BADGE[st],
+            placeVariants: variants,
           });
         }
       }
@@ -473,9 +521,10 @@ export default function AvailabilityMap({
       markerLayerRef.current = statusGroups.get("confirmed");
 
       const addPin = (p: InternalPoint) => {
+        const isPlacePin = p.glyphSlug === "";
         const icon = L.divIcon({
           className: "",
-          html: `<div class="map-pin ${p.cls}" title="${p.badge}">${productGlyph(p.glyphSlug)}</div>`,
+          html: `<div class="map-pin ${p.cls}" title="${p.badge}">${isPlacePin ? placeGlyph() : productGlyph(p.glyphSlug)}</div>`,
           iconSize: [32, 32],
           iconAnchor: [16, 16],
           popupAnchor: [0, -14],
@@ -509,10 +558,10 @@ export default function AvailabilityMap({
         const html = `
           <div class="popup-ticket">
             <div class="popup-name"><span>${escAttr(p.placeLabel)}</span><span class="stamp ${STATUS_STAMP[p.statusKey]} stamp--flat" style="font-size:10px;padding:0 4px;">${p.badge}</span></div>
-            <div class="popup-product">${escAttr(p.productName)}</div>
+            ${isPlacePin ? `<div class="popup-meta">${p.placeVariants && p.placeVariants > 1 ? `${p.placeVariants} productos con reportes aquí` : "lugar con reportes"}</div>` : `<div class="popup-product">${escAttr(p.productName)}</div>`}
             ${price}
             <div class="popup-meta">${p.barrio ? `${escAttr(p.barrio)} · ` : ""}${meta}</div>
-            ${marks}
+            ${isPlacePin ? "" : marks}
             ${reportLink}
           </div>`;
 
@@ -553,18 +602,21 @@ export default function AvailabilityMap({
         if (frameKey === lastFrameKeyRef.current && !forceFrameRef.current) return;
         lastFrameKeyRef.current = frameKey;
         forceFrameRef.current = false;
-        // Vista de pais (elegir punto): encuadrar Cuba completa, sin focos locales.
-        if (countryView) {
-          map.fitBounds(L.latLngBounds(regionFor(null).bounds).pad(0.08), {
-            maxZoom: MAP_MAX_ZOOM - 1,
-            animate: false,
-          });
-          return;
-        }
-        // Captura de pin (flujo unico de reporte): con punto elegido (o ancla
-        // del usuario) la camara va ahi; sin ninguno, vista de provincia.
-        if (pickMode && anchor) {
-          map.setView([anchor.lat, anchor.lng], DEFAULT_RADIUS_ZOOM, { animate: false });
+        // Elegir punto (onboarding o re-pick): con punto/ancla ya elegido la
+        // camara va cerca de el; sin nada, centro urbano UTIL (municipio ->
+        // provincia -> Habana seed) a zoom de ciudad — nunca el mar entero.
+        if (pickMode) {
+          if (anchor) {
+            map.setView([anchor.lat, anchor.lng], DEFAULT_RADIUS_ZOOM, { animate: false });
+            return;
+          }
+          const pickMc = focusMunicipio ? MUNICIPIO_CENTERS[focusMunicipio] : undefined;
+          const pickCenter: [number, number] = pickMc
+            ? [pickMc.lat, pickMc.lng]
+            : focusProvincia && REGIONS[focusProvincia]
+              ? regionFor(focusProvincia).center
+              : PICK_FALLBACK_CENTER;
+          map.setView(pickCenter, 12, { animate: false });
           return;
         }
         const mc = focusMunicipio ? MUNICIPIO_CENTERS[focusMunicipio] : undefined;

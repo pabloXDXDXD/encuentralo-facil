@@ -33,7 +33,10 @@ export async function GET(req: Request) {
       confirmedOnly,
     );
     return NextResponse.json({ ok: true, rows });
-  } catch {
+  } catch (err) {
+    // 503 al cliente, pero el error real queda en el log del servidor:
+    // sin esto un fallo transitorio de la BD dev es indiagnosticable.
+    console.error("[api/search] search failed:", err);
     return NextResponse.json({ ok: false, error: "unavailable", rows: [] }, { status: 503 });
   }
 }

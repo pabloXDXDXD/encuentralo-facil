@@ -75,7 +75,23 @@ try {
   await page.fill('input[aria-label="Buscar producto"]', "pollo");
   await page.locator("button", { hasText: /Pollo\s*\d+\s*lugares?/ }).first().waitFor({ timeout: 10000 });
   await page.locator("button", { hasText: /Pollo\s*\d+\s*lugares?/ }).first().click();
-  await page.waitForSelector(".map-pin:not(.map-pin--anchor), .map-cluster", { timeout: 20000 });
+  // La BD dev es remota: un 503 transitorio del API deja cero pines y el test
+  // en rojo. Reintentar la busqueda (mismo click en la sugerencia) hasta 3 veces.
+  let pinsUp = false;
+  for (let i = 0; i < 3 && !pinsUp; i++) {
+    try {
+      await page.waitForSelector(".map-pin:not(.map-pin--anchor), .map-cluster", {
+        timeout: 8000,
+      });
+      pinsUp = true;
+    } catch {
+      await page
+        .locator("button", { hasText: /Pollo\s*\d+\s*lugares?/ })
+        .first()
+        .click();
+    }
+  }
+  if (!pinsUp) throw new Error("la busqueda no pintó pines tras 3 intentos");
   await page.waitForTimeout(1500);
 
   // --- Test 1: sticky del buscador ------------------------------------
