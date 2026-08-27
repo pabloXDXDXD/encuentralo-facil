@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
   title: "DóndeHay — ¿dónde hay?",
   description:
-    "Reportes comunitarios de qué productos hay en cada tienda de La Habana, actualizados en tiempo real.",
+    "Reportes comunitarios de qué productos hay en cada lugar de La Habana, actualizados en tiempo real.",
   manifest: "/manifest.webmanifest",
   openGraph: {
     type: "website",
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
     siteName: "DóndeHay",
     title: "DóndeHay — ¿dónde hay?",
     description:
-      "Reportes comunitarios de qué productos hay en cada tienda de La Habana, actualizados en tiempo real.",
+      "Reportes comunitarios de qué productos hay en cada lugar de La Habana, actualizados en tiempo real.",
   },
   twitter: { card: "summary" },
 };

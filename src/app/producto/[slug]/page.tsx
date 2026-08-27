@@ -62,7 +62,7 @@ export default async function ProductPage({ params }: Props) {
           >
             <div className="min-w-0 flex-1">
               <p className="truncate font-semibold">
-                <Link href={`/tienda/${row.store_id}`} className="hover:underline">
+                <Link href={`/lugar/${row.store_id}`} className="hover:underline">
                   {row.store_name}
                 </Link>
               </p>

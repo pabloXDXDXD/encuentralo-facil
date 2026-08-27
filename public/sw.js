@@ -3,7 +3,7 @@
 //   navigations            -> network-first, cache fallback, shell last resort
 //   /api/availability|products -> network-first, cache fallback
 //   immutable _next/static -> cache-first
-const CACHE = "dh-v3";
+const CACHE = "dh-v4";
 const SHELL = ["/", "/reportar", "/como-funciona"];
 
 self.addEventListener("install", (event) => {

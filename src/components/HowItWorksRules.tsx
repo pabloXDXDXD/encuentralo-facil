@@ -10,7 +10,7 @@ const RULES = [
   {
     icon: Users,
     title: "Reportes de la comunidad",
-    body: "Cualquier persona reporta qué hay en cada tienda. Sin cuenta, sin registro, sin datos personales.",
+    body: "Cualquier persona reporta qué hay en cada lugar. Sin cuenta, sin registro, sin datos personales.",
   },
   {
     icon: ClockCounterClockwise,

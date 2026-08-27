@@ -1,7 +1,7 @@
 /**
  * Catalogo canonico estatico (espejo del seed) para el typeahead del
  * buscador. Permite sugerir productos incluso sin conexion o antes de
- * que llegue el snapshot; los conteos de tiendas vienen del snapshot.
+ * que llegue el snapshot; los conteos de lugares vienen del snapshot.
  */
 export const PRODUCT_CATALOG: { slug: string; name: string; emoji: string }[] = [
   // Proteina
