@@ -6,6 +6,7 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
     testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
   resolve: {
     alias: { "@": path.resolve("./src") },
