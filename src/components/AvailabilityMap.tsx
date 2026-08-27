@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
@@ -39,6 +45,8 @@ type Props = {
   countryView?: boolean;
   /** Appends a "Reportar aqui" link to every availability popup. */
   popupReportLink?: boolean;
+  /** Visibilidad de estados activa (chips de filtro del home): filtra la leyenda. */
+  legendStatuses?: Partial<Record<MapPoint["status"], boolean>>;
 };
 
 export type HomeRowLike = {
@@ -100,6 +108,29 @@ const STATUS_STAMP: Record<MapPoint["status"], string> = {
   stale: "stamp-stale",
   out: "stamp-nohay",
   unknown: "stamp-unknown",
+};
+
+/** Filas de leyenda por estado: clase de pin, texto y glifo. */
+const LEGEND_META: Record<
+  MapPoint["status"],
+  { cls: string; label: string; icon: ReactNode }
+> = {
+  confirmed: {
+    cls: "map-pin--confirmed",
+    label: "Hay (<24h)",
+    icon: <Plus size={10} weight="bold" />,
+  },
+  stale: {
+    cls: "map-pin--uncertain",
+    label: "Hay (no seguro)",
+    icon: <Question size={10} weight="bold" />,
+  },
+  out: {
+    cls: "map-pin--out",
+    label: "Ya no hay",
+    icon: <X size={10} weight="bold" />,
+  },
+  unknown: { cls: "map-pin--unknown", label: "Sin datos", icon: null },
 };
 
 /** Orden canonico de los estados; un grupo de clusters por cada uno. */
@@ -237,15 +268,18 @@ export default function AvailabilityMap({
   radiusMeters,
   countryView,
   popupReportLink,
+  legendStatuses,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const frameRef = useRef<(() => void) | null>(null);
   const anchorMarkerRef = useRef<any>(null);
   const markerLayerRef = useRef<any>(null);
-  // True once the user manually picked a point on this map instance: framing
-  // must stop moving the camera after that.
-  const userPickedRef = useRef(false);
+  // Ultima firma de encuadre aplicada: evita re-fit identicos y respeta la
+  // camara que el usuario mueve a mano mientras los parametros no cambien.
+  const lastFrameKeyRef = useRef<string>("");
+  // Fuerza un unico reencuadre extra (boton "centrar") con la firma vigente.
+  const forceFrameRef = useRef(false);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   // La instancia del mapa vive en estado a proposito: al recrear el mapa
   // (cambio de provincia/municipio) setStatus("ready") seria un no-op y el
@@ -293,7 +327,9 @@ export default function AvailabilityMap({
           minZoom: countryView ? COUNTRY_MIN_ZOOM : region.minZoom,
           maxZoom: MAP_MAX_ZOOM,
           zoomControl: false,
-          attributionControl: true,
+          // El credito obligatorio es el de OpenStreetMap; el prefijo "Leaflet"
+          // que el control añade por defecto se elimina (control dedicado abajo).
+          attributionControl: false,
           maxBounds: L.latLngBounds(region.bounds).pad(0.08),
           maxBoundsViscosity: 0.9,
         });
@@ -302,6 +338,7 @@ export default function AvailabilityMap({
           attribution:
             '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         }).addTo(map);
+        L.control.attribution({ prefix: false }).addTo(map);
 
         mapRef.current = map;
         setMapInstance(map);
@@ -320,7 +357,6 @@ export default function AvailabilityMap({
       frameRef.current = null;
       anchorMarkerRef.current = null;
       markerLayerRef.current = null;
-      userPickedRef.current = false;
       containerRef.current?.removeEventListener("click", onPopupClick);
       mapRef.current?.remove();
       mapRef.current = null;
@@ -499,9 +535,24 @@ export default function AvailabilityMap({
       // La camara pertenece al USUARIO: en busqueda se centra en su punto con
       // el zoom que dicta el radio elegido, no en los resultados.
       const frame = () => {
-        // Tras un pick manual la camara NUNCA se mueve sola: re-encuadrar al
-        // cambiar el anchor prop descenta el mapa justo cuando el usuario eligio.
-        if (userPickedRef.current) return;
+        // Reencuadre solo cuando CAMBIAN los parametros del encuadre (ancla,
+        // radio, modo, foco): ni repaints identicos ni arrastres manuales del
+        // usuario provocan saltos de camara. El boton centrar fuerza uno.
+        const anchorKey = anchor
+          ? `${anchor.lat.toFixed(5)},${anchor.lng.toFixed(5)}`
+          : "";
+        const frameKey = [
+          anchorKey,
+          radiusMeters ?? "",
+          countryView ? "country" : "",
+          pickMode ? "pick" : "",
+          focusMunicipio ?? "",
+          focusProvincia ?? "",
+          points ? "search" : "browse",
+        ].join("|");
+        if (frameKey === lastFrameKeyRef.current && !forceFrameRef.current) return;
+        lastFrameKeyRef.current = frameKey;
+        forceFrameRef.current = false;
         // Vista de pais (elegir punto): encuadrar Cuba completa, sin focos locales.
         if (countryView) {
           map.fitBounds(L.latLngBounds(regionFor(null).bounds).pad(0.08), {
@@ -575,14 +626,19 @@ export default function AvailabilityMap({
       if (cancelled || !map) return;
 
       const place = (lat: number, lng: number) => {
-        userPickedRef.current = true;
         upsertAnchor(L, map, lat, lng, true);
         onPick?.(lat, lng);
         // Sin recentrado: el marcador aparece donde se toco y la camara
         // permanece donde esta (saltos de camara desorientan al elegir).
       };
 
-      const handler = (e: L.LeafletMouseEvent) => place(e.latlng.lat, e.latlng.lng);
+      // Solo clicks dentro de Cuba: toques fuera del bounding nacional (mar,
+      // otra isla) se ignoran para no anclar el punto de busqueda por descuido.
+      const cubaBounds = L.latLngBounds(regionFor(null).bounds).pad(0.02);
+      const handler = (e: L.LeafletMouseEvent) => {
+        if (!cubaBounds.contains(e.latlng)) return;
+        place(e.latlng.lat, e.latlng.lng);
+      };
       map.on("click", handler);
 
       // If an anchor was already chosen, keep showing it while re-picking.
@@ -608,7 +664,10 @@ export default function AvailabilityMap({
         {!pickMode && (
           <button
             type="button"
-            onClick={() => frameRef.current?.()}
+            onClick={() => {
+              forceFrameRef.current = true;
+              frameRef.current?.();
+            }}
             aria-label="Centrar en los resultados"
             title="Centrar en los resultados"
             className="btn btn-ghost absolute right-3 top-3 z-[500] h-10 w-10 justify-center rounded-md !p-0"
@@ -618,35 +677,46 @@ export default function AvailabilityMap({
         )}
       </div>
 
-      {/* Leyenda de estados. El credito OSM obligatorio vive en el control de
-          atribucion del mapa (centrado al fondo); en modo elegir el mapa se
-          mantiene limpio: solo atribucion. */}
-      {!pickMode && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t-2 border-dashed border-line px-3 py-2 text-xs text-ink-soft">
-          <span className="flex items-center gap-1.5">
-            <span aria-hidden className="map-pin map-pin--confirmed" style={{ width: 18, height: 18 }}>
-              <Plus size={10} weight="bold" />
-            </span>
-            Hay (&lt;24h)
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span aria-hidden className="map-pin map-pin--uncertain" style={{ width: 18, height: 18 }}>
-              <Question size={10} weight="bold" />
-            </span>
-            Hay (no seguro)
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span aria-hidden className="map-pin map-pin--out" style={{ width: 18, height: 18 }}>
-              <X size={10} weight="bold" />
-            </span>
-            Ya no hay
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span aria-hidden className="map-pin map-pin--unknown" style={{ width: 18, height: 18, fontSize: 10 }} />
-            Sin datos
-          </span>
-        </div>
-      )}
+      {/* Leyenda DINAMICA: solo los estados presentes en los datos visibles y
+          habilitados por los filtros del home. El credito OSM obligatorio vive
+          en el control de atribucion del mapa; en modo elegir queda limpio. */}
+      {!pickMode &&
+        (() => {
+          const present = new Set<MapPoint["status"]>();
+          for (const p of points ?? []) present.add(p.status);
+          for (const r of rows ?? []) {
+            if (r.lat === null || r.lng === null) continue;
+            present.add(
+              r.availability === "available"
+                ? "confirmed"
+                : r.status === "habia"
+                  ? "stale"
+                  : r.status === "ya_no_hay"
+                    ? "out"
+                    : "unknown",
+            );
+          }
+          const items = STATUS_ORDER.filter(
+            (k) => present.has(k) && legendStatuses?.[k] !== false,
+          );
+          if (items.length === 0) return null;
+          return (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t-2 border-dashed border-line px-3 py-2 text-xs text-ink-soft">
+              {items.map((k) => (
+                <span key={k} className="flex items-center gap-1.5">
+                  <span
+                    aria-hidden
+                    className={`map-pin ${LEGEND_META[k].cls}`}
+                    style={{ width: 18, height: 18 }}
+                  >
+                    {LEGEND_META[k].icon}
+                  </span>
+                  {LEGEND_META[k].label}
+                </span>
+              ))}
+            </div>
+          );
+        })()}
     </div>
   );
 }

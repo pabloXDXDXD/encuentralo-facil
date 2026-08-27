@@ -346,7 +346,29 @@ export default function HomeView({
 
   const searchPoints: MapPoint[] = useMemo(() => {
     if (!visibleResults) return [];
-    return visibleResults.map((r) => ({
+    // UN pin por LUGAR: variantes del mismo producto (ej. los distintos
+    // cortes de pollo que vende un sitio) colapsaban en clusters confusos
+    // ("3" que al acercar era un solo pin apilado). Gana la fila de mejor
+    // estado y, a igualdad, la mas barata; el lugar manda, no la variante.
+    const RANK: Record<SearchRow["status"], number> = {
+      confirmed: 0,
+      stale: 1,
+      unknown: 2,
+      out: 3,
+    };
+    const byPlace = new Map<string, SearchRow>();
+    for (const r of visibleResults) {
+      const cur = byPlace.get(r.store_id);
+      if (
+        !cur ||
+        RANK[r.status] < RANK[cur.status] ||
+        (RANK[r.status] === RANK[cur.status] &&
+          (r.price_from ?? Infinity) < (cur.price_from ?? Infinity))
+      ) {
+        byPlace.set(r.store_id, r);
+      }
+    }
+    return Array.from(byPlace.values()).map((r) => ({
       // Nombres legados del wire (D5): store_id/store_name ya traen el
       // uuid/etiqueta del place.
       place_id: r.store_id,
@@ -444,7 +466,6 @@ export default function HomeView({
           </button>
         </div>
         <AvailabilityMapDynamic
-          countryView
           pickMode
           onPick={onAnchorPicked}
           anchor={anchor}
@@ -701,6 +722,7 @@ export default function HomeView({
           focusProvincia={activeProvincia}
           anchor={anchor}
           radiusMeters={radius}
+          legendStatuses={statusFilter}
           popupReportLink
         />
       ) : (
