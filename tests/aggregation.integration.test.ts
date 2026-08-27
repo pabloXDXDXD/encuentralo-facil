@@ -38,6 +38,24 @@ const placeDevices = {
 const createdPlaceIds: string[] = [];
 
 async function setup(): Promise<void> {
+  // Purge leftovers from previously interrupted runs: if a past execution died
+  // between here and afterAll (timeout, kill), fixture rows survive and the
+  // products slug unique constraint makes every retry fail at setup forever.
+  // All constants are namespaced to this suite (__test_*) — safe on shared dev.
+  await client.query(
+    `delete from public.report_votes where report_id in
+       (select r.id from public.reports r
+         where r.store_id in (select id from public.stores where name = '__test_store')
+            or r.product_id in (select id from public.products where slug = '__test_prod'))`,
+  );
+  await client.query(
+    `delete from public.reports
+      where store_id in (select id from public.stores where name = '__test_store')
+         or product_id in (select id from public.products where slug = '__test_prod')`,
+  );
+  await client.query(`delete from public.stores where name = '__test_store'`);
+  await client.query(`delete from public.products where slug = '__test_prod'`);
+  await client.query(`delete from public.product_categories where name = '__test_cat'`);
   await client.query(
     `insert into public.product_categories (id, name, emoji) values ($1,'__test_cat','🧪')
      on conflict (id) do nothing`,
