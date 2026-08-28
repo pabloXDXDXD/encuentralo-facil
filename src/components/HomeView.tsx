@@ -57,7 +57,7 @@ type SearchRow = {
   lat: number;
   lng: number;
   distance_m: number;
-  status: "confirmed" | "stale" | "out" | "unknown";
+  status: "confirmed" | "out" | "unknown";
   price_from: number | null;
   reporter_count: number;
   last_seen_at: string | null;
@@ -82,15 +82,9 @@ const RADIUS_OPTIONS = [
 const STATUS_META = [
   {
     key: "confirmed",
-    label: "Hay (<24h)",
+    label: "Hay",
     cls: "map-pin--confirmed",
     selCls: "bg-pin-hay-bg text-pin-hay-ink border-pin-hay-border",
-  },
-  {
-    key: "stale",
-    label: "Hay (no seguro)",
-    cls: "map-pin--uncertain",
-    selCls: "bg-pin-stale-bg text-pin-stale-ink border-pin-stale-border",
   },
   {
     key: "out",
@@ -133,8 +127,8 @@ export default function HomeView({
   const [gpsSupported, setGpsSupported] = useState(true);
   const [radius, setRadius] = useState(3000);
   const [statusFilter, setStatusFilter] = useState<
-    Record<"confirmed" | "stale" | "out" | "unknown", boolean>
-  >({ confirmed: true, stale: true, out: true, unknown: false });
+    Record<"confirmed" | "out" | "unknown", boolean>
+  >({ confirmed: true, out: true, unknown: false });
   const [minPriceInput, setMinPriceInput] = useState("");
   const [maxPriceInput, setMaxPriceInput] = useState("");
   // Panel de sugerencias visible hasta que el usuario lo cierra (Esc o click fuera).
@@ -289,7 +283,7 @@ export default function HomeView({
   const needsAnchor = loaded && !anchor && !pickMode;
   const activeFilterCount =
     (radius !== 3000 ? 1 : 0) +
-    (!statusFilter.confirmed || !statusFilter.stale || !statusFilter.out || statusFilter.unknown
+    (!statusFilter.confirmed || !statusFilter.out || statusFilter.unknown
       ? 1
       : 0) +
     (minPriceInput !== "" || maxPriceInput !== "" ? 1 : 0);
@@ -352,9 +346,8 @@ export default function HomeView({
     // estado y, a igualdad, la mas barata; el lugar manda, no la variante.
     const RANK: Record<SearchRow["status"], number> = {
       confirmed: 0,
-      stale: 1,
-      unknown: 2,
-      out: 3,
+      unknown: 1,
+      out: 2,
     };
     const byPlace = new Map<string, SearchRow>();
     for (const r of visibleResults) {

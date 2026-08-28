@@ -20,7 +20,7 @@ export type AvailabilityRow = {
   queue_level: number | null;
   lat: number | string | null;
   lng: number | string | null;
-  /** hay | ya_no_hay | habia (modelo temporal de 24h) */
+  /** hay | ya_no_hay (modelo de vida v2: 7d con confirm-refresh) */
   status?: string | null;
 };
 

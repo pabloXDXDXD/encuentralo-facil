@@ -52,7 +52,7 @@ export default function RootLayout({
         <main className="mx-auto max-w-xl px-4 pb-24 pt-4">{children}</main>
         <footer className="border-t-2 border-dashed border-line py-6 text-center text-xs text-ink-soft">
           <div aria-hidden className="barcode mx-auto mb-3 w-44 opacity-80" />
-          Hecho por y para el barrio · lo reportado pasa a «hay (no seguro)» tras 24 h
+          Hecho por y para el barrio · lo reportado caduca en una semana · confírmalo para mantenerlo vivo
         </footer>
         <PendingChip />
       </body>

@@ -3,7 +3,7 @@
  * Runs against the real database (DATABASE_URL in .env.local).
  * Creates its own fixtures with unique ids and cleans up after itself.
  */
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 import dotenv from "dotenv";
@@ -381,5 +381,132 @@ describe("place-keyed reporting (lugares-mapfirst)", () => {
     const row = rows.find((r) => r.product_slug === "__test_prod")!;
     expect(row.store_id).toBe(anchor.id);
     expect(Number(row.reporter_count)).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ---- report lifecycle v2 (24h vivo, confirm refresca, 2 deniers matan) ------
+const lifeStoreId = randomUUID();
+const lifeProductId = randomUUID();
+const lifeAuthor = `it-la-${randomUUID()}`;
+const lifeVoter1 = `it-lb-${randomUUID()}`;
+const lifeVoter2 = `it-lc-${randomUUID()}`;
+
+describe("report lifecycle v2 (24h alive, confirm refreshes, 2 deniers kill)", () => {
+  /** Is the lifecycle fixture visible right now? */
+  async function lifeVisible(): Promise<boolean> {
+    const { rows } = await client.query(
+      `select 1 from get_active_availability(null)
+        where store_id = $1 and product_slug = '__test_prod_life'`,
+      [lifeStoreId],
+    );
+    return rows.length > 0;
+  }
+
+  async function insertLifeReport(minutesAgo: number): Promise<void> {
+    await client.query(
+      `insert into public.reports (store_id, product_id, device_hash, availability, created_at)
+       values ($1,$2,$3,'available', now() - make_interval(mins => $4))`,
+      [lifeStoreId, lifeProductId, lifeAuthor, minutesAgo],
+    );
+  }
+
+  async function latestLifeReportId(): Promise<string> {
+    const { rows } = await client.query<{ id: string }>(
+      `select id from public.reports
+        where store_id = $1 and product_id = $2
+        order by created_at desc limit 1`,
+      [lifeStoreId, lifeProductId],
+    );
+    return rows[0].id;
+  }
+
+  async function resetLife(): Promise<void> {
+    await client.query(
+      `delete from public.report_votes where report_id in
+         (select id from public.reports where store_id = $1)`,
+      [lifeStoreId],
+    );
+    await client.query(`delete from public.reports where store_id = $1`, [lifeStoreId]);
+  }
+
+  beforeAll(async () => {
+    // Self-healing purge (same pattern as setup()): a crashed previous run
+    // must not poison the unique slug forever.
+    await client.query(
+      `delete from public.report_votes where report_id in
+         (select r.id from public.reports r
+           where r.store_id = $1
+              or r.product_id = $2)`,
+      [lifeStoreId, lifeProductId],
+    );
+    await client.query(
+      `delete from public.reports where store_id = $1 or product_id = $2`,
+      [lifeStoreId, lifeProductId],
+    );
+    await client.query(`delete from public.places where id = $1`, [lifeStoreId]);
+    await client.query(`delete from public.stores where id = $1`, [lifeStoreId]);
+    await client.query(`delete from public.products where slug = '__test_prod_life'`);
+    await client.query(
+      `insert into public.stores (id, name, barrio, kind, lat, lng)
+       values ($1,'__test_store_life','__test_barrio','other',23.1,-82.4)`,
+      [lifeStoreId],
+    );
+    // Mirror of the PR1 distillation (D3): the place inherits the store UUID.
+    await client.query(
+      `insert into public.places (id, label, lat, lng) values ($1,'__test_store_life',23.1,-82.4)`,
+      [lifeStoreId],
+    );
+    await client.query(
+      `insert into public.products (id, slug, name, emoji, category_id)
+       values ($1,'__test_prod_life','__test_prod_life','🧪',$2)`,
+      [lifeProductId, catId],
+    );
+  });
+
+  afterAll(async () => {
+    await resetLife();
+    await client.query(`delete from public.places where id = $1`, [lifeStoreId]);
+    await client.query(`delete from public.stores where id = $1`, [lifeStoreId]);
+    await client.query(`delete from public.products where id = $1`, [lifeProductId]);
+  });
+
+  it("hides a 8-day-old report with no signals", async () => {
+    await insertLifeReport(8 * 24 * 60);
+    expect(await lifeVisible()).toBe(false);
+  });
+
+  it("a fresh confirm vote keeps an 8-day-old report alive", async () => {
+    await client.query(
+      `insert into public.report_votes (report_id, device_hash, vote, created_at)
+       values ($1,$2,'confirm', now())`,
+      [await latestLifeReportId(), lifeVoter1],
+    );
+    expect(await lifeVisible()).toBe(true);
+  });
+
+  it("submit_vote accepts an alive report beyond the old 6 h window", async () => {
+    await resetLife();
+    await insertLifeReport(10 * 60); // 10 h: alive (<24 h), old rule rejected it
+    const res = await client.query<{ result: { ok: boolean } }>(
+      `select public.submit_vote($1,'confirm',$2) as result`,
+      [await latestLifeReportId(), lifeVoter1],
+    );
+    expect(res.rows[0].result.ok).toBe(true);
+  });
+
+  it("one denier does not kill; two distinct deniers kill the report", async () => {
+    await resetLife();
+    await insertLifeReport(10);
+    const reportId = await latestLifeReportId();
+    await client.query(
+      `insert into public.report_votes (report_id, device_hash, vote) values ($1,$2,'deny')`,
+      [reportId, lifeVoter1],
+    );
+    expect(await lifeVisible()).toBe(true); // 1 solo negativo no mata
+    await client.query(
+      `insert into public.report_votes (report_id, device_hash, vote) values ($1,$2,'deny')`,
+      [reportId, lifeVoter2],
+    );
+    expect(await lifeVisible()).toBe(false); // 2 independientes: dato quemado
   });
 });

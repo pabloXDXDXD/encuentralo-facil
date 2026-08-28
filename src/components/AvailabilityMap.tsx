@@ -12,7 +12,7 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import type { Map as LeafletMap } from "leaflet";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Check, Crosshair, MapPin, Plus, Question, X } from "@phosphor-icons/react";
+import { Check, Crosshair, MapPin, Plus, X } from "@phosphor-icons/react";
 import { MUNICIPIO_CENTERS, REGIONS, regionFor } from "@/lib/geo";
 import { ProductIcon } from "@/lib/product-icons";
 import { timeAgo } from "@/lib/format";
@@ -22,7 +22,7 @@ import { quickMarkReport } from "@/lib/quick-mark";
  * OpenStreetMap view.
  * Two input modes:
  *  - rows:      availability snapshot (browse) -> strong/weak pins
- *  - points:    search results -> confirmed/uncertain/out/unknown pins
+ *  - points:    search results -> confirmed/out/unknown pins
  * Camera locked to the selected province region; municipality focus frames it.
  */
 
@@ -82,7 +82,7 @@ export type MapPoint = {
   place_label: string;
   /** Null en lugares creados por clustering (sin geocodificacion inversa). */
   barrio: string | null;
-  status: "confirmed" | "stale" | "out" | "unknown";
+  status: "confirmed" | "out" | "unknown";
   price_from: number | null;
   reporter_count: number;
   last_seen_at: string | null;
@@ -90,14 +90,12 @@ export type MapPoint = {
 
 const STATUS_CLASS: Record<MapPoint["status"], string> = {
   confirmed: "map-pin--confirmed",
-  stale: "map-pin--uncertain",
   out: "map-pin--out",
   unknown: "map-pin--unknown",
 };
 
 const STATUS_BADGE: Record<MapPoint["status"], string> = {
-  confirmed: "Hay (<24h)",
-  stale: "Hay (no seguro)",
+  confirmed: "Hay",
   out: "Ya no hay",
   unknown: "Sin datos",
 };
@@ -105,7 +103,6 @@ const STATUS_BADGE: Record<MapPoint["status"], string> = {
 /** Clase del stamp del popup segun estado (mismos colores que los pines). */
 const STATUS_STAMP: Record<MapPoint["status"], string> = {
   confirmed: "stamp-hay",
-  stale: "stamp-stale",
   out: "stamp-nohay",
   unknown: "stamp-unknown",
 };
@@ -117,13 +114,8 @@ const LEGEND_META: Record<
 > = {
   confirmed: {
     cls: "map-pin--confirmed",
-    label: "Hay (<24h)",
+    label: "Hay",
     icon: <Plus size={10} weight="bold" />,
-  },
-  stale: {
-    cls: "map-pin--uncertain",
-    label: "Hay (no seguro)",
-    icon: <Question size={10} weight="bold" />,
   },
   out: {
     cls: "map-pin--out",
@@ -134,7 +126,7 @@ const LEGEND_META: Record<
 };
 
 /** Orden canonico de los estados; un grupo de clusters por cada uno. */
-const STATUS_ORDER: MapPoint["status"][] = ["confirmed", "stale", "out", "unknown"];
+const STATUS_ORDER: MapPoint["status"][] = ["confirmed", "out", "unknown"];
 
 type BrowseRow = NonNullable<Props["rows"]>[number];
 
@@ -142,19 +134,16 @@ type BrowseRow = NonNullable<Props["rows"]>[number];
 function browseStatus(r: BrowseRow): MapPoint["status"] {
   return r.availability === "available"
     ? "confirmed"
-    : r.status === "habia"
-      ? "stale"
-      : r.status === "ya_no_hay"
-        ? "out"
-        : "unknown";
+    : r.status === "ya_no_hay"
+      ? "out"
+      : "unknown";
 }
 
 /** Mejor disponibilidad primero; desempate por precio mas bajo. */
 const BROWSE_RANK: Record<MapPoint["status"], number> = {
   confirmed: 0,
-  stale: 1,
-  unknown: 2,
-  out: 3,
+  unknown: 1,
+  out: 2,
 };
 
 /** Fallback urbano para elegir punto sin provincia conocida (zona seed). */
@@ -745,15 +734,7 @@ export default function AvailabilityMap({
           for (const p of points ?? []) present.add(p.status);
           for (const r of rows ?? []) {
             if (r.lat === null || r.lng === null) continue;
-            present.add(
-              r.availability === "available"
-                ? "confirmed"
-                : r.status === "habia"
-                  ? "stale"
-                  : r.status === "ya_no_hay"
-                    ? "out"
-                    : "unknown",
-            );
+            present.add(browseStatus(r));
           }
           const items = STATUS_ORDER.filter(
             (k) => present.has(k) && legendStatuses?.[k] !== false,
