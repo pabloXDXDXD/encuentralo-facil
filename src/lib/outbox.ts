@@ -7,6 +7,9 @@ export type OutboxEntry = {
   /** Lugar ancla (era places): los envios nuevos con lugar existente traen placeId. */
   placeId?: string;
   placeName?: string | null;
+  /** Nombre y direccion editables (opcional): se persisten en places. */
+  label?: string | null;
+  address?: string | null;
   /**
    * Pin del reporte (modo coordenadas): los envios nuevos sin lugar existente
    * traen lat/lng; /api/reports valida placeId XOR lat+lng.
@@ -117,6 +120,8 @@ export async function flushOutbox(deviceId: string): Promise<void> {
           placeId: entry.placeId ?? entry.storeId,
           lat: entry.lat,
           lng: entry.lng,
+          label: entry.label,
+          address: entry.address,
           productId: entry.productId,
           availability: entry.availability,
           priceCup: entry.priceCup,

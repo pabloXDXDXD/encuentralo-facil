@@ -81,17 +81,19 @@ export type SubmitPlaceReportInput = {
   lat?: number | null;
   lng?: number | null;
   label?: string | null;
+  /** Direccion libre del lugar (opcional; se persiste en places.address). */
+  address?: string | null;
   priceCup?: number | null;
   comment?: string | null;
   queueLevel?: number | null;
 };
 
-/** Mismo orden posicional que public.submit_place_report (10 args). */
+/** Mismo orden posicional que public.submit_place_report (11 args). */
 export async function submitPlaceReport(
   input: SubmitPlaceReportInput,
 ): Promise<SubmitReportResult> {
   const { rows } = await query<{ result: SubmitReportResult }>(
-    "select public.submit_place_report($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) as result",
+    "select public.submit_place_report($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) as result",
     [
       input.productId,
       input.deviceHash,
@@ -103,6 +105,7 @@ export async function submitPlaceReport(
       input.priceCup ?? null,
       input.comment ?? null,
       input.queueLevel ?? null,
+      input.address ?? null,
     ],
   );
   return rows[0].result;
@@ -115,6 +118,7 @@ export type ParsedReportIntake = {
   lat: number | null;
   lng: number | null;
   label: string | null;
+  address: string | null;
   priceCup: number | null;
   comment: string | null;
   queueLevel: number | null;
@@ -166,6 +170,11 @@ export function parseReportIntake(
       ? body.label.trim().slice(0, 80)
       : null;
 
+  const address =
+    typeof body.address === "string" && body.address.trim().length > 0
+      ? body.address.trim().slice(0, 120)
+      : null;
+
   let priceCup: number | null = null;
   if (body.priceCup !== null && body.priceCup !== undefined && body.priceCup !== "") {
     const n = Number(body.priceCup);
@@ -198,6 +207,7 @@ export function parseReportIntake(
       lat,
       lng,
       label,
+      address,
       priceCup,
       comment,
       queueLevel,
@@ -228,12 +238,13 @@ export type PlaceSummary = {
   municipio: string | null;
   lat: number | null;
   lng: number | null;
+  address: string | null;
 };
 
 export async function getPlaceById(id: string) {
   if (!UUID_RE.test(id)) return null;
   const { rows } = await query<PlaceSummary>(
-    `select id, label, barrio, municipio, lat, lng
+    `select id, label, barrio, municipio, lat, lng, address
        from public.places where id = $1 and active = true`,
     [id],
   );

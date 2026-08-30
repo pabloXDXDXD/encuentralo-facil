@@ -35,6 +35,7 @@ export default async function ReportarPage({ searchParams }: Props) {
     name: string;
     lat: number | null;
     lng: number | null;
+    address: string | null;
   } | null = null;
   const rawPlace = params.place ?? params.store;
   if (rawPlace) {
@@ -46,6 +47,7 @@ export default async function ReportarPage({ searchParams }: Props) {
           name: place.label,
           lat: place.lat,
           lng: place.lng,
+          address: place.address,
         };
       }
     } catch {

@@ -92,6 +92,20 @@ describe("parseReportIntake — normalizacion de campos", () => {
     if (empty.ok) expect(empty.value.label).toBeNull();
   });
 
+  it("recorta address (max 120) y descarta vacia", () => {
+    const out = parseReportIntake({ ...BASE, ...PIN, address: "  Calle 12 #34  " });
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.value.address).toBe("Calle 12 #34");
+
+    const empty = parseReportIntake({ ...BASE, ...PIN, address: "   " });
+    expect(empty.ok).toBe(true);
+    if (empty.ok) expect(empty.value.address).toBeNull();
+
+    const long = parseReportIntake({ ...BASE, ...PIN, address: "x".repeat(200) });
+    expect(long.ok).toBe(true);
+    if (long.ok) expect(long.value.address?.length).toBe(120);
+  });
+
   it("redondea coords a 6 decimales", () => {
     const out = parseReportIntake({ ...BASE, lat: 21.123456789, lng: "-79.987654321" });
     expect(out.ok).toBe(true);

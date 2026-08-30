@@ -38,6 +38,7 @@ export async function POST(req: Request) {
       lat: parsed.value.lat,
       lng: parsed.value.lng,
       label: parsed.value.label,
+      address: parsed.value.address,
       priceCup: parsed.value.priceCup,
       comment: parsed.value.comment,
       queueLevel: parsed.value.queueLevel,

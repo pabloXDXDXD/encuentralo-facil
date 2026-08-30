@@ -17,7 +17,6 @@ import Notice from "@/components/Notice";
 import { outboxAdd } from "@/lib/outbox";
 import { getDeviceId } from "@/lib/client-device";
 import { ProductIcon } from "@/lib/product-icons";
-import { queueLabel } from "@/lib/format";
 import type { Availability } from "@/lib/repo-types";
 
 const AvailabilityMapDynamic = dynamic(() => import("@/components/AvailabilityMap"), {
@@ -47,6 +46,7 @@ type Props = {
     name: string;
     lat: number | null;
     lng: number | null;
+    address: string | null;
   } | null;
 };
 
@@ -73,11 +73,11 @@ export default function ReportFlow({ provincia, initialProduct, initialPlace }: 
       ? { lat: initialPlace.lat, lng: initialPlace.lng }
       : null,
   );
-  const [label, setLabel] = useState("");
+  const [label, setLabel] = useState(initialPlace?.name ?? "");
+  // Direccion del lugar: precargada si el deep link trae un lugar con ella.
+  const [address, setAddress] = useState(initialPlace?.address ?? "");
   const [availability, setAvailability] = useState<Availability>("available");
   const [price, setPrice] = useState("");
-  const [comment, setComment] = useState("");
-  const [queue, setQueue] = useState<number | null>(null);
   const [stats, setStats] = useState<{ reports: number; votes: number; points: number } | null>(
     null,
   );
@@ -184,14 +184,15 @@ export default function ReportFlow({ provincia, initialProduct, initialPlace }: 
       productId: product.id,
       availability,
       priceCup: price.trim() === "" ? null : Number(price),
-      comment: comment.trim() || null,
-      queueLevel: availability === "available" ? queue : null,
+      // Nombre y direccion van SIEMPRE: con lugar existente se actualizan si
+      // el usuario los edita; con pin manual bautizan al lugar creado.
+      label: label.trim() || null,
+      address: address.trim() || null,
     };
-    // Lugar existente -> placeId; pin manual -> coordenadas (+etiqueta
-    // opcional para nombrar el lugar si el servidor lo crea).
+    // Lugar existente -> placeId; pin manual -> coordenadas.
     const payload = place
       ? { ...base, placeId: place.id }
-      : { ...base, lat: pin.lat, lng: pin.lng, label: label.trim() || null };
+      : { ...base, lat: pin.lat, lng: pin.lng };
 
     // Entrada de outbox para los caminos offline/error: placeId XOR lat/lng,
     // igual que el envio en linea (los undefined se omiten al serializar).
@@ -205,8 +206,10 @@ export default function ReportFlow({ provincia, initialProduct, initialPlace }: 
       productName: product.name,
       availability,
       priceCup: base.priceCup,
-      comment: base.comment,
-      queueLevel: base.queueLevel,
+      comment: null,
+      queueLevel: null,
+      label: base.label,
+      address: base.address,
       createdAt: Date.now(),
     };
 
@@ -255,16 +258,14 @@ export default function ReportFlow({ provincia, initialProduct, initialPlace }: 
       setPlace(null);
       setPin(null);
       setLabel("");
+      setAddress("");
       setPrice("");
-      setComment("");
-      setQueue(null);
       setLatest(null);
     }, 1800);
   }
 
   function resetSoft() {
     setPrice("");
-    setComment("");
   }
 
   if (status.kind === "queued") {
@@ -376,18 +377,27 @@ export default function ReportFlow({ provincia, initialProduct, initialPlace }: 
               : "Toca el mapa para marcar el lugar."}
           </p>
 
-          {!place && (
-            <label className="block">
-              <span className="px-1 text-sm text-ink-soft">Nombre del lugar (opcional)</span>
-              <input
-                value={label}
-                onChange={(e) => setLabel(e.target.value.slice(0, 80))}
-                maxLength={80}
-                placeholder="Ej: La Esquina"
-                className="mt-1 w-full rounded-md border-2 border-ink bg-card px-3 py-2"
-              />
-            </label>
-          )}
+          <label className="block">
+            <span className="px-1 text-sm text-ink-soft">Nombre del lugar (opcional)</span>
+            <input
+              value={label}
+              onChange={(e) => setLabel(e.target.value.slice(0, 80))}
+              maxLength={80}
+              placeholder="Ej: La Esquina"
+              className="mt-1 w-full rounded-md border-2 border-ink bg-card px-3 py-2"
+            />
+          </label>
+
+          <label className="block">
+            <span className="px-1 text-sm text-ink-soft">Dirección (opcional)</span>
+            <input
+              value={address}
+              onChange={(e) => setAddress(e.target.value.slice(0, 120))}
+              maxLength={120}
+              placeholder="Ej: Calle 23 #456 entre A y B"
+              className="mt-1 w-full rounded-md border-2 border-ink bg-card px-3 py-2"
+            />
+          </label>
 
           {latest?.found && latest.reportId && (
             <Notice variant="warning" className="space-y-2">
@@ -446,51 +456,17 @@ export default function ReportFlow({ provincia, initialProduct, initialPlace }: 
           </div>
 
           {availability === "available" && (
-            <>
-              <label className="block">
-                <span className="px-1 text-sm text-ink-soft">Precio (opcional, CUP)</span>
-                <input
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, ""))}
-                  inputMode="numeric"
-                  placeholder="$"
-                  className="mt-1 w-full rounded-md border-2 border-ink bg-card px-3 py-2 font-display text-xl"
-                />
-              </label>
-
-              <div>
-                <span className="px-1 text-sm text-ink-soft">¿Hay cola? (opcional)</span>
-                <div className="mt-1 grid grid-cols-3 gap-2">
-                  {[1, 2, 3].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setQueue(queue === n ? null : n)}
-                      className={`rounded-md border-2 p-2 text-center text-xs font-semibold ${
-                        queue === n
-                          ? "border-ink bg-ink text-paper"
-                          : "border-line bg-card text-ink-soft"
-                      }`}
-                    >
-                      {queueLabel(n)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
+            <label className="block">
+              <span className="px-1 text-sm text-ink-soft">Precio (opcional, CUP)</span>
+              <input
+                value={price}
+                onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, ""))}
+                inputMode="numeric"
+                placeholder="$"
+                className="mt-1 w-full rounded-md border-2 border-ink bg-card px-3 py-2 font-display text-xl"
+              />
+            </label>
           )}
-
-          <label className="block">
-            <span className="px-1 text-sm text-ink-soft">Comentario (opcional)</span>
-            <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value.slice(0, 200))}
-              rows={2}
-              maxLength={200}
-              placeholder="Ej: por libra, hacen fila temprano…"
-              className="mt-1 w-full resize-none rounded-md border-2 border-ink bg-card px-3 py-2"
-            />
-          </label>
 
           <div className="flex gap-2">
             <button
