@@ -43,8 +43,6 @@ type Props = {
    * provincia/municipio y abre la camara encuadrando Cuba completa.
    */
   countryView?: boolean;
-  /** Appends a "Reportar aqui" link to every availability popup. */
-  popupReportLink?: boolean;
   /** Visibilidad de estados activa (chips de filtro del home): filtra la leyenda. */
   legendStatuses?: Partial<Record<MapPoint["status"], boolean>>;
 };
@@ -204,16 +202,6 @@ function placeGlyph(): string {
   return html;
 }
 
-/** Inline phosphor icon markup for the popup "Reportar aqui" link. */
-function reportLinkGlyph(): string {
-  let html = glyphCache.get("__report_link__");
-  if (html === undefined) {
-    html = renderToStaticMarkup(<MapPin size={12} weight="bold" />);
-    glyphCache.set("__report_link__", html);
-  }
-  return html;
-}
-
 /** Glifos inline para las acciones de marcado rapido del popup. */
 function markYesGlyph(): string {
   let html = glyphCache.get("__mark_yes__");
@@ -246,7 +234,7 @@ function escAttr(value: string | null | undefined): string {
 // aunque el popup se haya cerrado y reabierto durante el envio.
 const busyMarks = new Set<string>();
 
-async function handlePopupMark(btn: HTMLElement) {
+async function handlePopupMark(btn: HTMLButtonElement) {
   const d = btn.dataset;
   const key = `${d.placeId}:${d.productSlug}`;
   if (!d.placeId || !d.productSlug || !d.status || busyMarks.has(key)) return;
@@ -266,11 +254,25 @@ async function handlePopupMark(btn: HTMLElement) {
     availability: d.status === "out_of_stock" ? "out_of_stock" : "available",
   });
 
-  // El popup pudo cerrarse (btn desconectado): solo tocar el DOM si sigue vivo.
+  // Resultado: el boton elegido queda marcado y deshabilitado y la opcion
+  // contraria desaparece; en error se re-habilita todo y se anuncia el motivo.
   if (marksEl && btn.isConnected) {
-    marksEl.innerHTML = res.ok
-      ? '<span class="stamp stamp--flat stamp-hay popup-mark-done">Reportado ✓</span>'
-      : `<span class="popup-mark-error">${escAttr(res.error)}</span>`;
+    marksEl.querySelectorAll<HTMLButtonElement>(".popup-mark").forEach((b) => {
+      if (res.ok) {
+        if (b !== btn) b.remove();
+      } else {
+        b.disabled = false;
+      }
+    });
+    if (res.ok) {
+      btn.disabled = true;
+      btn.classList.add("popup-mark-done");
+    } else {
+      const err = document.createElement("span");
+      err.className = "popup-mark-error";
+      err.textContent = res.error ?? "error";
+      marksEl.appendChild(err);
+    }
   }
   busyMarks.delete(key);
 }
@@ -279,7 +281,7 @@ async function handlePopupMark(btn: HTMLElement) {
 function onPopupClick(e: MouseEvent) {
   const target = e.target as HTMLElement | null;
   const btn = target?.closest?.(".popup-mark");
-  if (btn instanceof HTMLElement) void handlePopupMark(btn);
+  if (btn instanceof HTMLButtonElement) void handlePopupMark(btn);
 }
 
 export default function AvailabilityMap({
@@ -292,7 +294,6 @@ export default function AvailabilityMap({
   anchor,
   radiusMeters,
   countryView,
-  popupReportLink,
   legendStatuses,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -531,9 +532,6 @@ export default function AvailabilityMap({
                 p.reporterCount === 1 ? "confirmación" : "confirmaciones"
               }`
             : "sin reportes recientes";
-        const reportLink = popupReportLink
-          ? `<a class="popup-report" href="/reportar?place=${p.placeId}">${reportLinkGlyph()}<span>Reportar aquí</span></a>`
-          : "";
         // Marcado rapido: dos acciones que crean un reporte NUEVO sin salir
         // del popup (delegacion de clicks via onPopupClick). Anclan al place.
         const yesLabel = p.statusKey === "out" ? "Hay de nuevo" : "Aún hay";
@@ -551,7 +549,6 @@ export default function AvailabilityMap({
             ${price}
             <div class="popup-meta">${p.barrio ? `${escAttr(p.barrio)} · ` : ""}${meta}</div>
             ${isPlacePin ? "" : marks}
-            ${reportLink}
           </div>`;
 
         const marker = L.marker([p.lat, p.lng], {

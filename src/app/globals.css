@@ -417,16 +417,6 @@ a:focus-visible {
   color: var(--ink-soft);
 }
 
-.popup-ticket .popup-report {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 6px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--accent);
-}
-
 /* Acciones de marcado rapido dentro del popup-ticket (mismo lenguaje visual). */
 .popup-marks {
   display: flex;
@@ -463,8 +453,12 @@ a:focus-visible {
   color: var(--nohay-ink);
 }
 
-.popup-mark-done {
-  font-size: 11px;
+/* Boton elegido del marcado rapido: queda marcado (borde solido + stamp)
+   y deshabilitado; la opcion contraria se elimina del DOM. */
+.popup-mark.popup-mark-done {
+  opacity: 1;
+  border-color: currentColor;
+  box-shadow: 2px 2px 0 0 var(--stamp);
 }
 
 .popup-mark-error {

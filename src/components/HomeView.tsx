@@ -718,7 +718,6 @@ export default function HomeView({
           anchor={anchor}
           radiusMeters={radius}
           legendStatuses={statusFilter}
-          popupReportLink
         />
       ) : (
         // Sin busqueda activa: el mapa muestra SOLO el ancla del usuario.
